@@ -75,13 +75,30 @@ function visit(node: SyntaxNode, results: ClassInfo[]): void {
   }
 }
 
-// Extracts ClassInfo from a class_declaration node.
-function buildClassInfo(node: SyntaxNode): ClassInfo {
+function getNamedChildrenOfType(node: SyntaxNode | null, type: string): SyntaxNode[] {
+  if (!node) { return []; }
+  return node.namedChildren.filter((c: SyntaxNode) => c.type === type);
+}
+
+function extractCommonInfo(node: SyntaxNode): {
+  name: string;
+  loc: number;
+  body: SyntaxNode | null;
+  methods: string[];
+  fields: FieldInfo[];
+} {
   const name = node.childForFieldName('name')?.text ?? 'Unknown';
   const loc = node.endPosition.row - node.startPosition.row + 1;
   const body = node.childForFieldName('body');
   const methods = extractMethods(body);
   const fields = extractFields(body);
+
+  return { name, loc, body, methods, fields };
+}
+
+// Extracts ClassInfo from a class_declaration node.
+function buildClassInfo(node: SyntaxNode): ClassInfo {
+  const { name, loc, body, methods, fields } = extractCommonInfo(node);
   const constructors = extractConstructors(body);
   const modifiers = getModifiers(node);
   const type = determineType(modifiers);
@@ -109,11 +126,7 @@ function buildClassInfo(node: SyntaxNode): ClassInfo {
 // Extracts ClassInfo from an interface_declaration node.
 // Interfaces that extend other interfaces have those listed under Implements.
 function buildInterfaceInfo(node: SyntaxNode): ClassInfo {
-  const name = node.childForFieldName('name')?.text ?? 'Unknown';
-  const loc = node.endPosition.row - node.startPosition.row + 1;
-  const body = node.childForFieldName('body');
-  const methods = extractMethods(body);
-  const fields = extractFields(body);
+  const { name, loc, body, methods, fields } = extractCommonInfo(node);
 
   // For interfaces, "extends_interfaces" is a child node (not a field)
   const extendsNode = node.namedChildren.find((c: SyntaxNode) => c.type === 'extends_interfaces');
@@ -154,13 +167,10 @@ function determineType(modifiers: string[]): string {
 
 // Collects method names from a class_body or interface_body node.
 function extractMethods(bodyNode: SyntaxNode | null): string[] {
-  if (!bodyNode) { return []; }
   const methods: string[] = [];
-  for (const child of bodyNode.namedChildren) {
-    if (child.type === 'method_declaration') {
-      const name = child.childForFieldName('name');
-      if (name) { methods.push(name.text); }
-    }
+  for (const child of getNamedChildrenOfType(bodyNode, 'method_declaration')) {
+    const name = child.childForFieldName('name');
+    if (name) { methods.push(name.text); }
   }
   return methods;
 }
@@ -191,24 +201,33 @@ function collectTypeNames(node: SyntaxNode | null | undefined): string[] {
 // Extracts field declarations from a class_body node.
 // Returns FieldInfo with name, type, modifiers, and optional initializer.
 function extractFields(bodyNode: SyntaxNode | null): FieldInfo[] {
-  if (!bodyNode) { return []; }
   const fields: FieldInfo[] = [];
 
-  for (const child of bodyNode.namedChildren) {
-    if (child.type === 'field_declaration') {
-      const modifiers = getModifiers(child);
-      const typeNode = child.childForFieldName('type');
-      const type = extractTypeName(typeNode);
+  for (const child of getNamedChildrenOfType(bodyNode, 'field_declaration')) {
+    const modifiers = getModifiers(child);
+    const typeNode = child.childForFieldName('type');
+    const type = extractTypeName(typeNode);
 
-      // A field_declaration can have multiple variable_declarators (e.g., int x, y;)
-      const declarator = child.childForFieldName('declarator');
-      if (declarator) {
-        fields.push(...extractVariableDeclarators(declarator, type, modifiers));
-      }
+    // A field_declaration can have multiple variable_declarators (e.g., int x, y;)
+    const declarator = child.childForFieldName('declarator');
+    if (declarator) {
+      fields.push(...extractVariableDeclarators(declarator, type, modifiers));
     }
   }
 
   return fields;
+}
+
+function buildFieldFromDeclarator(node: SyntaxNode, type: string, modifiers: string[]): FieldInfo {
+  const nameNode = node.childForFieldName('name');
+  const valueNode = node.childForFieldName('value');
+
+  return {
+    name: nameNode?.text ?? 'unknown',
+    type,
+    modifiers,
+    initializer: valueNode?.text
+  };
 }
 
 // Extracts individual variable declarators from a field declaration.
@@ -217,29 +236,13 @@ function extractVariableDeclarators(node: SyntaxNode, type: string, modifiers: s
   const fields: FieldInfo[] = [];
 
   if (node.type === 'variable_declarator') {
-    const nameNode = node.childForFieldName('name');
-    const valueNode = node.childForFieldName('value');
-
-    fields.push({
-      name: nameNode?.text ?? 'unknown',
-      type,
-      modifiers,
-      initializer: valueNode?.text
-    });
+    fields.push(buildFieldFromDeclarator(node, type, modifiers));
   }
 
   // If there are multiple declarators in a list, recurse
   for (const child of node.namedChildren) {
     if (child.type === 'variable_declarator') {
-      const nameNode = child.childForFieldName('name');
-      const valueNode = child.childForFieldName('value');
-
-      fields.push({
-        name: nameNode?.text ?? 'unknown',
-        type,
-        modifiers,
-        initializer: valueNode?.text
-      });
+      fields.push(buildFieldFromDeclarator(child, type, modifiers));
     }
   }
 
@@ -282,20 +285,17 @@ function extractTypeName(typeNode: SyntaxNode | null): string {
 // Extracts constructor declarations from a class_body node.
 // Returns ConstructorInfo with parameters and modifiers.
 function extractConstructors(bodyNode: SyntaxNode | null): ConstructorInfo[] {
-  if (!bodyNode) { return []; }
   const constructors: ConstructorInfo[] = [];
 
-  for (const child of bodyNode.namedChildren) {
-    if (child.type === 'constructor_declaration') {
-      const modifiers = getModifiers(child);
-      const paramsNode = child.childForFieldName('parameters');
-      const parameters = extractParameters(paramsNode);
+  for (const child of getNamedChildrenOfType(bodyNode, 'constructor_declaration')) {
+    const modifiers = getModifiers(child);
+    const paramsNode = child.childForFieldName('parameters');
+    const parameters = extractParameters(paramsNode);
 
-      constructors.push({
-        parameters,
-        modifiers
-      });
-    }
+    constructors.push({
+      parameters,
+      modifiers
+    });
   }
 
   return constructors;
