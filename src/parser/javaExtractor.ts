@@ -9,6 +9,25 @@ export interface ClassInfo {
   Type: string;       // "public", "abstract", "final", "private", "protected", "interface", or "default"
   Extends: string | null;
   Implements: string[];
+  Fields: FieldInfo[];
+  Constructors: ConstructorInfo[];
+}
+
+export interface FieldInfo {
+  name: string;
+  type: string;
+  modifiers: string[];
+  initializer?: string;
+}
+
+export interface ConstructorInfo {
+  parameters: ParameterInfo[];
+  modifiers: string[];
+}
+
+export interface ParameterInfo {
+  name: string;
+  type: string;
 }
 
 let parser: Parser | null = null;
@@ -62,6 +81,8 @@ function buildClassInfo(node: SyntaxNode): ClassInfo {
   const loc = node.endPosition.row - node.startPosition.row + 1;
   const body = node.childForFieldName('body');
   const methods = extractMethods(body);
+  const fields = extractFields(body);
+  const constructors = extractConstructors(body);
   const modifiers = getModifiers(node);
   const type = determineType(modifiers);
 
@@ -80,6 +101,8 @@ function buildClassInfo(node: SyntaxNode): ClassInfo {
     Type: type,
     Extends: extendsTypes.length > 0 ? extendsTypes[0] : null,
     Implements: implementsTypes,
+    Fields: fields,
+    Constructors: constructors,
   };
 }
 
@@ -90,6 +113,7 @@ function buildInterfaceInfo(node: SyntaxNode): ClassInfo {
   const loc = node.endPosition.row - node.startPosition.row + 1;
   const body = node.childForFieldName('body');
   const methods = extractMethods(body);
+  const fields = extractFields(body);
 
   // For interfaces, "extends_interfaces" is a child node (not a field)
   const extendsNode = node.namedChildren.find((c: SyntaxNode) => c.type === 'extends_interfaces');
@@ -102,6 +126,8 @@ function buildInterfaceInfo(node: SyntaxNode): ClassInfo {
     Type: 'interface',
     Extends: null,
     Implements: extendsList,
+    Fields: fields,
+    Constructors: [], // Interfaces don't have constructors
   };
 }
 
@@ -160,4 +186,137 @@ function collectTypeNames(node: SyntaxNode | null | undefined): string[] {
     }
   }
   return names;
+}
+
+// Extracts field declarations from a class_body node.
+// Returns FieldInfo with name, type, modifiers, and optional initializer.
+function extractFields(bodyNode: SyntaxNode | null): FieldInfo[] {
+  if (!bodyNode) { return []; }
+  const fields: FieldInfo[] = [];
+
+  for (const child of bodyNode.namedChildren) {
+    if (child.type === 'field_declaration') {
+      const modifiers = getModifiers(child);
+      const typeNode = child.childForFieldName('type');
+      const type = extractTypeName(typeNode);
+
+      // A field_declaration can have multiple variable_declarators (e.g., int x, y;)
+      const declarator = child.childForFieldName('declarator');
+      if (declarator) {
+        fields.push(...extractVariableDeclarators(declarator, type, modifiers));
+      }
+    }
+  }
+
+  return fields;
+}
+
+// Extracts individual variable declarators from a field declaration.
+// Handles both single (String name) and multiple (int x, y) declarations.
+function extractVariableDeclarators(node: SyntaxNode, type: string, modifiers: string[]): FieldInfo[] {
+  const fields: FieldInfo[] = [];
+
+  if (node.type === 'variable_declarator') {
+    const nameNode = node.childForFieldName('name');
+    const valueNode = node.childForFieldName('value');
+
+    fields.push({
+      name: nameNode?.text ?? 'unknown',
+      type,
+      modifiers,
+      initializer: valueNode?.text
+    });
+  }
+
+  // If there are multiple declarators in a list, recurse
+  for (const child of node.namedChildren) {
+    if (child.type === 'variable_declarator') {
+      const nameNode = child.childForFieldName('name');
+      const valueNode = child.childForFieldName('value');
+
+      fields.push({
+        name: nameNode?.text ?? 'unknown',
+        type,
+        modifiers,
+        initializer: valueNode?.text
+      });
+    }
+  }
+
+  return fields;
+}
+
+// Extracts a single type name from a type node (handles primitives, identifiers, generics, arrays).
+function extractTypeName(typeNode: SyntaxNode | null): string {
+  if (!typeNode) { return 'unknown'; }
+
+  // Primitive types like int, boolean, etc.
+  if (typeNode.type === 'integral_type' || typeNode.type === 'floating_point_type' ||
+      typeNode.type === 'boolean_type' || typeNode.type === 'void_type') {
+    return typeNode.text;
+  }
+
+  // Simple type_identifier like String
+  if (typeNode.type === 'type_identifier') {
+    return typeNode.text;
+  }
+
+  // Generic type like List<String>
+  if (typeNode.type === 'generic_type') {
+    return typeNode.text;
+  }
+
+  // Scoped type like java.util.List
+  if (typeNode.type === 'scoped_type_identifier') {
+    return typeNode.text;
+  }
+
+  // Array type like String[]
+  if (typeNode.type === 'array_type') {
+    return typeNode.text;
+  }
+
+  return typeNode.text;
+}
+
+// Extracts constructor declarations from a class_body node.
+// Returns ConstructorInfo with parameters and modifiers.
+function extractConstructors(bodyNode: SyntaxNode | null): ConstructorInfo[] {
+  if (!bodyNode) { return []; }
+  const constructors: ConstructorInfo[] = [];
+
+  for (const child of bodyNode.namedChildren) {
+    if (child.type === 'constructor_declaration') {
+      const modifiers = getModifiers(child);
+      const paramsNode = child.childForFieldName('parameters');
+      const parameters = extractParameters(paramsNode);
+
+      constructors.push({
+        parameters,
+        modifiers
+      });
+    }
+  }
+
+  return constructors;
+}
+
+// Extracts parameter list from a formal_parameters node.
+function extractParameters(paramsNode: SyntaxNode | null): ParameterInfo[] {
+  if (!paramsNode) { return []; }
+  const parameters: ParameterInfo[] = [];
+
+  for (const child of paramsNode.namedChildren) {
+    if (child.type === 'formal_parameter') {
+      const typeNode = child.childForFieldName('type');
+      const nameNode = child.childForFieldName('name');
+
+      parameters.push({
+        name: nameNode?.text ?? 'unknown',
+        type: extractTypeName(typeNode)
+      });
+    }
+  }
+
+  return parameters;
 }
