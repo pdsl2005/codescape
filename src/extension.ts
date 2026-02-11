@@ -8,6 +8,7 @@ import * as path from 'path';
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+	console.log("CODESCAPE ACTIVATED");
 
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
@@ -117,7 +118,7 @@ async function workspaceScan(){
  * @returns An array of the uris for all the .java files not mentioned in .exclude
  */
 async function getJavaFiles(): Promise<vscode.Uri[]>{
-	console.log("scanning files....")
+	console.log("scanning files....");
 	const excludeUri = await vscode.workspace.findFiles(".exclude");
 	let excludeFilter = null;
 	//if there is an exclude file add them to excludeFiles array
@@ -136,31 +137,81 @@ async function getJavaFiles(): Promise<vscode.Uri[]>{
 // this is a tiny webpage that logs messages from the extension and sends a message back when it's ready
 function getWebviewContent() {
   return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <body>
-      <h1>Codescape</h1>
-      <p>Webview loaded.</p>
+<!DOCTYPE html>
+<html lang="en">
+  <body>
+    <h1>Codescape</h1>
 
-      <script>
-        // this gives us access to VS Code's messaging API
-        const vscode = acquireVsCodeApi();
+    <div id="content">
+      <p>Loading parsed data...</p>
+    </div>
 
-        // listen for messages FROM the extension
-        window.addEventListener('message', event => {
-          console.log('Received from extension:', event.data);
+    <p>Webview loaded.</p>
+
+    <script>
+      //access VS Code messaging API
+      const vscode = acquireVsCodeApi();
+
+      const container = document.getElementById('content');
+
+      //listen for messages FROM the extension
+      window.addEventListener('message', (event) => {
+        const message = event.data;
+
+        console.log('Received from extension:', message);
+
+        if (!message || message.type !== 'AST_DATA') {
+          console.warn('Unexpected message:', message);
+          return;
+        }
+
+        try {
+          renderAST(message.payload);
+        } catch (err) {
+          console.error('Schema error:', err);
+          container.innerHTML = '<p>Error rendering parsed data.</p>';
+        }
+      });
+
+      function renderAST(payload) {
+        //validate structure
+        if (!payload || !Array.isArray(payload.files)) {
+          throw new Error('Invalid payload structure: missing files array');
+        }
+
+        //empty state
+        if (payload.files.length === 0) {
+          container.innerHTML = '<p>No Java files found.</p>';
+          return;
+        }
+
+        //render simple list
+        let html = '<ul>';
+
+        payload.files.forEach((file) => {
+          html += '<li>' +
+            '<strong>' + file.name + '</strong><br/>' +
+            'Lines: ' + file.lines + '<br/>' +
+            'Classes: ' + file.classes + '<br/>' +
+            'Methods: ' + file.functions +
+            '</li>';
         });
 
-        // send a message TO the extension
-        vscode.postMessage({
-          type: 'WEBVIEW_READY',
-          payload: { status: 'ready' }
-        });
-      </script>
-    </body>
-    </html>
-  `;
+        html += '</ul>';
+        container.innerHTML = html;
+      }
+
+      //notify extension that webview is ready
+      vscode.postMessage({
+        type: 'WEBVIEW_READY',
+        payload: { status: 'ready' }
+      });
+    </script>
+  </body>
+</html>
+`;
 }
+
 
 
 // This method is called when your extension is deactivated
