@@ -4,7 +4,7 @@ import * as path from 'path';
 // JSON output contract for each extracted class/interface
 export interface ClassInfo {
   Classname: string;
-  Methods: string[];
+  Methods: string[];  // Method signatures in format "methodName(paramType1, paramType2)" or "methodName()" for no params
   Loc: number;
   Type: string;       // "public", "abstract", "final", "private", "protected", "interface", or "default"
   Extends: string | null;
@@ -165,14 +165,83 @@ function determineType(modifiers: string[]): string {
   return 'default';
 }
 
-// Collects method names from a class_body or interface_body node.
+// Collects method signatures from a class_body or interface_body node.
+// Returns signatures in format "methodName(paramType1, paramType2)" or "methodName()" for no params.
+// This allows distinguishing method overloads (same name, different parameters).
 function extractMethods(bodyNode: SyntaxNode | null): string[] {
   const methods: string[] = [];
-  for (const child of getNamedChildrenOfType(bodyNode, 'method_declaration')) {
-    const name = child.childForFieldName('name');
-    if (name) { methods.push(name.text); }
+  for (const child of bodyNode.namedChildren) {
+    if (child.type === 'method_declaration') {
+      const name = child.childForFieldName('name');
+      if (name) {
+        const parameters = child.childForFieldName('parameters');
+        const paramTypes = extractParameterTypes(parameters);
+        const signature = `${name.text}(${paramTypes.join(', ')})`;
+        methods.push(signature);
+      }
+    }
   }
   return methods;
+}
+
+// Extracts parameter types from a formal_parameters node.
+// Returns an array of type strings (e.g., ["int", "String", "List"]).
+function extractParameterTypes(parametersNode: SyntaxNode | null): string[] {
+  if (!parametersNode) { return []; }
+  
+  const paramTypes: string[] = [];
+  
+  // formal_parameters contains formal_parameter nodes
+  for (const child of parametersNode.namedChildren) {
+    if (child.type === 'formal_parameter' || child.type === 'spread_parameter') {
+      // Get the type from the formal_parameter
+      const typeNode = child.childForFieldName('type');
+      if (typeNode) {
+        const typeName = extractTypeName(typeNode);
+        if (typeName) {
+          paramTypes.push(typeName);
+        }
+      }
+    }
+  }
+  
+  return paramTypes;
+}
+
+// Extracts a type name from a type node (handles type_identifier, generic_type, etc.).
+function extractTypeName(typeNode: SyntaxNode): string | null {
+  if (!typeNode) { return null; }
+  
+  // Handle simple type identifiers
+  if (typeNode.type === 'type_identifier') {
+    return typeNode.text;
+  }
+  
+  // Handle generic types like List<String> -> "List"
+  if (typeNode.type === 'generic_type') {
+    const baseType = typeNode.namedChildren.find((c: SyntaxNode) => c.type === 'type_identifier');
+    if (baseType) {
+      return baseType.text;
+    }
+  }
+  
+  // Handle scoped type identifiers like com.example.MyType
+  if (typeNode.type === 'scoped_type_identifier') {
+    return typeNode.text;
+  }
+  
+  // Handle array types like int[] -> "int[]"
+  if (typeNode.type === 'array_type') {
+    const elementType = typeNode.childForFieldName('element');
+    if (elementType) {
+      const baseName = extractTypeName(elementType);
+      return baseName ? `${baseName}[]` : null;
+    }
+  }
+  
+  // Handle primitive types (int, boolean, etc.) - they appear as type_identifier
+  // For other cases, try to get text representation
+  return typeNode.text || null;
 }
 
 // Recursively collects type names from a superclass, super_interfaces, or extends_interfaces node.
