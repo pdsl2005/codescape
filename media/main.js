@@ -13,7 +13,9 @@ const gridLength = 10;
 
 // 2d array to check if the buildings are overlapping
 var grid = Array.from({length: gridLength}, ()=>
-new Array(gridLength).fill(null));
+Array(gridLength).fill(null));
+// building dictionary list initialization
+var buildings = [];
 
 // render function for test city view 
 function render() {
@@ -21,9 +23,6 @@ function render() {
 
     drawIsoGrid(ctx, gridLength, gridLength, TILE_L, offsetX, offsetY);
 
-    // test buildings
-    placeIsoBuilding(7, 5, 4, "#598BAF");
-    placeIsoBuilding(4, 8, 6, "#598BAF");
 }
 
 // building placement function
@@ -36,7 +35,7 @@ function placeIsoBuilding(col, row, floors, color){
     var isoX = (col - row) * TILE_L / 2 + offsetX;
     var isoY = (col + row) * TILE_L / 4 + offsetY;
 
-    drawIsoBuilding(ctx, isoX, isoY + TILE_L / 2, floors, TILE_L, color);
+    drawIsoBuilding(ctx, isoX, isoY + TILE_L / 2, (floors - 1), TILE_L, color);
     
     const building = {col, row, floors, color};
     grid[col][row] = building;
@@ -44,6 +43,13 @@ function placeIsoBuilding(col, row, floors, color){
     return true;
 }
 
+// TEST
+drawIsoGrid(ctx, gridLength, gridLength, TILE_L, offsetX, offsetY);
+placeIsoBuilding(7, 5, 4, "#598BAF");
+placeIsoBuilding(4, 5, 6, "#598BAF");
+
+// for saved building - don't need to check tile occupation 
+// because when new building is added, it checks before add
 function placeIsoSavedBuilding(col, row, floors, color){
     var isoX = (col - row) * TILE_L / 2 + offsetX;
     var isoY = (col + row) * TILE_L / 4 + offsetY;
@@ -56,16 +62,13 @@ function placeIsoSavedBuilding(col, row, floors, color){
     return true;
 }
 
-// actual rendering TEST
-render();
-
 
 
 // ADDED for Load & Save
 
 // if current building data is saved
 // building list example
-let buildings = [
+var sample_buildings = [
     { col: 2, row: 3, floor: 4, color: "#3498db" },
   { col: 5, row: 1, floor: 2, color: "#e74c3c" }
 ]; // adding id for identification as index might be good 
@@ -80,7 +83,7 @@ function loadSavedBuildings(ctx){
     const savedData = localStorage.getItem("cityData");
     buildings = JSON.parse(savedData)
     grid = Array.from({length: gridLength}, ()=>
-        new Array(gridLength).fill(null));
+        Array(gridLength).fill(null));
     if (buildings) {
         buildings.forEach(b => {
         placeIsoSavedBuilding(ctx, b.gridX, b.gridY, b.floor, b.color);
