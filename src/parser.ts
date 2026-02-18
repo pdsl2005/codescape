@@ -34,3 +34,9 @@ export async function parseAndStore(uri: vscode.Uri, store: FileParseStore) {
 		console.error('Parsing failed for', uri.fsPath, err);
 	}
 }
+/**
+ * getter for parsed data from uri
+ */
+export function getData(uri: vscode.Uri, store: FileParseStore){
+	return store.get(uri);
+}

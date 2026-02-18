@@ -16,6 +16,10 @@
       {
         "command": "codescape.helloWorld",
         "title": "Codescape: Hello World"
+      },
+      {
+        "command": "codescape.scan",
+        "title": "Codescape Scan"
       }
     ]
   },
@@ -38,6 +42,7 @@
     "typescript-eslint": "^8.52.0"
   },
   "dependencies": {
+    "minimatch": "^10.1.2",
     "tree-sitter-java": "^0.23.5",
     "web-tree-sitter": "^0.26.5"
   }
