@@ -15,11 +15,7 @@
     "commands": [
       {
         "command": "codescape.helloWorld",
-        "title": "Hello World"
-      }, 
-      {
-        "command": "codescape.scan",
-         "title": "Codescape Scan"
+        "title": "Codescape: Hello World"
       }
     ]
   },
