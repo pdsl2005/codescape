@@ -2,8 +2,8 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { FileParseStore } from './state';
-import { parseAndStore } from './parser';
-import * as path from 'path';
+import { parseAndStore, parseAndStoreArray } from './parser';
+import { minimatch } from 'minimatch';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -35,6 +35,8 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// html content for the web viewer
 	panel.webview.html = getWebviewContent();
+
+
 
 	//listen for messages FROM the webview
 	panel.webview.onDidReceiveMessage(message => {
@@ -71,20 +73,27 @@ export function activate(context: vscode.ExtensionContext) {
 	// Simple in-memory store for parsed results
 	const store = new FileParseStore();
 
-	javaWatcher.onDidCreate((uri: vscode.Uri) => {
+	javaWatcher.onDidCreate(async (uri: vscode.Uri) => {
 		console.log('Java file created:', uri.fsPath);
 		// kick off parsing asynchronously
-		void parseAndStore(uri, store);
+    if(!await isExcluded(uri)){
+		  void parseAndStore(uri, store);
+      //TODO send message to frontend
+    }
 	});
 
-	javaWatcher.onDidChange((uri: vscode.Uri) => {
+	javaWatcher.onDidChange(async (uri: vscode.Uri) => {
 		console.log('Java file changed:', uri.fsPath);
-		void parseAndStore(uri, store);
-	});
+    if(!await isExcluded(uri)){
+		  void parseAndStore(uri, store);
+      //TODO send message to frontend
+    }
+  });
 
 	javaWatcher.onDidDelete((uri: vscode.Uri) => {
 		console.log('Java file deleted:', uri.fsPath);
 		store.remove(uri);
+    //TODO remove uri and send updated JSON to frontend
 	});
 
 	// Expose a command to dump the current parse store snapshot (useful for manual verification)
@@ -100,14 +109,9 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(scan);
 }
 
-async function workspaceScan(){
-	//TODO
-	//Get all java files not in exlclude
-	const files = await getJavaFiles();
-		
+async function workspaceScan(): Promise<vscode.Uri[]>{
+	return await getJavaFiles();
 }
-
-
 
 /**
  * Gets all java files within the workspace excluding the ones mentioned in .exclude. 
@@ -131,6 +135,18 @@ async function getJavaFiles(): Promise<vscode.Uri[]>{
 	//get all java files and exclude ones in exclude filter
 	let javaFiles = await vscode.workspace.findFiles("**/*.java",excludeFilter);
 	return javaFiles;
+}
+
+async function isExcluded(uri: vscode.Uri): Promise<Boolean>{
+	const excludeUri = await vscode.workspace.findFiles(".exclude");
+	const path = vscode.workspace.asRelativePath(uri);
+	if(excludeUri.length === 0){
+		return false;
+	}
+	const content = await vscode.workspace.fs.readFile(excludeUri[0]);
+	let decoded = new TextDecoder("utf-8").decode(content);
+	let excludeFiles = decoded.split('\n').map(line => line.trim()).filter(line => line.trim() !== '');
+	return excludeFiles.some(pattern => minimatch(path, pattern));
 }
 
 // new canvas-based city visualization that renders an isometric grid and buildings from AST data
