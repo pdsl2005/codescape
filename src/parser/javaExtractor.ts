@@ -170,6 +170,7 @@ function determineType(modifiers: string[]): string {
 // This allows distinguishing method overloads (same name, different parameters).
 function extractMethods(bodyNode: SyntaxNode | null): string[] {
   const methods: string[] = [];
+  if (!bodyNode) { return methods; }
   for (const child of bodyNode.namedChildren) {
     if (child.type === 'method_declaration') {
       const name = child.childForFieldName('name');
@@ -206,42 +207,6 @@ function extractParameterTypes(parametersNode: SyntaxNode | null): string[] {
   }
   
   return paramTypes;
-}
-
-// Extracts a type name from a type node (handles type_identifier, generic_type, etc.).
-function extractTypeName(typeNode: SyntaxNode): string | null {
-  if (!typeNode) { return null; }
-  
-  // Handle simple type identifiers
-  if (typeNode.type === 'type_identifier') {
-    return typeNode.text;
-  }
-  
-  // Handle generic types like List<String> -> "List"
-  if (typeNode.type === 'generic_type') {
-    const baseType = typeNode.namedChildren.find((c: SyntaxNode) => c.type === 'type_identifier');
-    if (baseType) {
-      return baseType.text;
-    }
-  }
-  
-  // Handle scoped type identifiers like com.example.MyType
-  if (typeNode.type === 'scoped_type_identifier') {
-    return typeNode.text;
-  }
-  
-  // Handle array types like int[] -> "int[]"
-  if (typeNode.type === 'array_type') {
-    const elementType = typeNode.childForFieldName('element');
-    if (elementType) {
-      const baseName = extractTypeName(elementType);
-      return baseName ? `${baseName}[]` : null;
-    }
-  }
-  
-  // Handle primitive types (int, boolean, etc.) - they appear as type_identifier
-  // For other cases, try to get text representation
-  return typeNode.text || null;
 }
 
 // Recursively collects type names from a superclass, super_interfaces, or extends_interfaces node.
