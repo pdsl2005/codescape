@@ -2,7 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { FileParseStore } from './state';
-import { parseAndStore, parseAndStoreArray } from './parser';
+import { parseAndStore} from './parser';
 import { minimatch } from 'minimatch';
 
 // This method is called when your extension is activated
