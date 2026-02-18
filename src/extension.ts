@@ -134,82 +134,179 @@ async function getJavaFiles(): Promise<vscode.Uri[]>{
 	return javaFiles;
 }
 
-// this is a tiny webpage that logs messages from the extension and sends a message back when it's ready
+// new canvas-based city visualization that renders an isometric grid and buildings from AST data
 function getWebviewContent() {
   return `
-<!DOCTYPE html>
-<html lang="en">
-  <body>
-    <h1>Codescape</h1>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { background: #1a1a2e; display: block; }
+      </style>
+    </head>
+    <body>
+      <!-- canvas element in webview -->
+      <canvas id="cityCanvas"></canvas>
 
-    <div id="content">
-      <p>Loading parsed data...</p>
-    </div>
+      <script>
+        const vscode = acquireVsCodeApi();
+        const canvas = document.getElementById('cityCanvas');
+        const ctx = canvas.getContext('2d');
 
-    <p>Webview loaded.</p>
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
 
-    <script>
-      //access VS Code messaging API
-      const vscode = acquireVsCodeApi();
+        const TILE_L = 50;
+        const offsetX = canvas.width / 2;
+        const offsetY = 100;
 
-      const container = document.getElementById('content');
+        //isometric grid rendering (from renderer.js)
 
-      //listen for messages FROM the extension
-      window.addEventListener('message', (event) => {
-        const message = event.data;
+        function drawIsoGrid(ctx, rows, cols, size, offsetX, offsetY) {
+          ctx.strokeStyle = '#2c2c2c';
+          var tileW = size;
+          var tileH = size / 2;
 
-        console.log('Received from extension:', message);
+          for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+              var isoX = (col - row) * tileW / 2 + offsetX;
+              var isoY = (col + row) * tileH / 2 + offsetY;
 
-        if (!message || message.type !== 'AST_DATA') {
-          console.warn('Unexpected message:', message);
-          return;
+              ctx.beginPath();
+              ctx.moveTo(isoX, isoY);
+              ctx.lineTo(isoX + tileW / 2, isoY + tileH / 2);
+              ctx.lineTo(isoX, isoY + tileH);
+              ctx.lineTo(isoX - tileW / 2, isoY + tileH / 2);
+              ctx.closePath();
+              ctx.stroke();
+            }
+          }
         }
 
-        try {
-          renderAST(message.payload);
-        } catch (err) {
-          console.error('Schema error:', err);
-          container.innerHTML = '<p>Error rendering parsed data.</p>';
+        //building drawing based on class data
+
+        function shade(color, percent) {
+          var num = parseInt(color.slice(1), 16),
+              amt = Math.round(2.55 * percent),
+              R = (num >> 16) + amt,
+              G = ((num >> 8) & 0x00ff) + amt,
+              B = (num & 0x0000ff) + amt;
+          return (
+            '#' +
+            (
+              0x1000000 +
+              (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
+              (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
+              (B < 255 ? (B < 1 ? 0 : B) : 255)
+            ).toString(16).slice(1)
+          );
         }
-      });
 
-      function renderAST(payload) {
-        //validate structure
-        if (!payload || !Array.isArray(payload.files)) {
-          throw new Error('Invalid payload structure: missing files array');
+        function drawIsoCube(ctx, x, y, width, height, color) {
+          const depthX = width / 2;
+          const depthY = width / 4;
+
+          const bottom = { x: x,          y: y };
+          const right  = { x: x + depthX, y: y - depthY };
+          const top    = { x: x,          y: y - 2 * depthY };
+          const left   = { x: x - depthX, y: y - depthY };
+
+          const bottomU = { x: bottom.x, y: bottom.y - height };
+          const rightU  = { x: right.x,  y: right.y  - height };
+          const topU    = { x: top.x,    y: top.y    - height };
+          const leftU   = { x: left.x,   y: left.y   - height };
+
+          // Left face
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(left.x, left.y);
+          ctx.lineTo(bottom.x, bottom.y);
+          ctx.lineTo(bottomU.x, bottomU.y);
+          ctx.lineTo(leftU.x, leftU.y);
+          ctx.closePath();
+          ctx.fill();
+
+          // Right face
+          ctx.fillStyle = shade(color, -20);
+          ctx.beginPath();
+          ctx.moveTo(right.x, right.y);
+          ctx.lineTo(bottom.x, bottom.y);
+          ctx.lineTo(bottomU.x, bottomU.y);
+          ctx.lineTo(rightU.x, rightU.y);
+          ctx.closePath();
+          ctx.fill();
+
+          // Top face
+          ctx.fillStyle = shade(color, 20);
+          ctx.beginPath();
+          ctx.moveTo(topU.x, topU.y);
+          ctx.lineTo(rightU.x, rightU.y);
+          ctx.lineTo(bottomU.x, bottomU.y);
+          ctx.lineTo(leftU.x, leftU.y);
+          ctx.closePath();
+          ctx.fill();
         }
 
-        //empty state
-        if (payload.files.length === 0) {
-          container.innerHTML = '<p>No Java files found.</p>';
-          return;
+        function drawIsoBuilding(ctx, baseX, baseY, floors, size, color) {
+          for (let i = 0; i < floors; i++) {
+            drawIsoCube(ctx, baseX, baseY - i * size / 2, size, size, color);
+          }
         }
 
-        //render simple list
-        let html = '<ul>';
+        function placeIsoBuilding(col, row, floors, color) {
+          var isoX = (col - row) * TILE_L / 2 + offsetX;
+          var isoY = (col + row) * TILE_L / 4 + offsetY;
+          drawIsoBuilding(ctx, isoX, isoY + TILE_L / 2, floors, TILE_L, color || '#598BAF');
+        }
 
-        payload.files.forEach((file) => {
-          html += '<li>' +
-            '<strong>' + file.name + '</strong><br/>' +
-            'Lines: ' + file.lines + '<br/>' +
-            'Classes: ' + file.classes + '<br/>' +
-            'Methods: ' + file.functions +
-            '</li>';
+        // store file data received from the extension
+        let fileData = [];
+
+        function render() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          drawIsoGrid(ctx, 10, 10, TILE_L, offsetX, offsetY);
+
+          if (fileData.length === 0) {
+            placeIsoBuilding(3, 3, 3, '#598BAF');
+            placeIsoBuilding(5, 5, 5, '#8B5CF6');
+            placeIsoBuilding(7, 3, 2, '#10B981');
+          } else {
+            // height based on class size (functions + classes)
+            fileData.forEach((file, i) => {
+              const floors = Math.max(1, (file.functions || 0) + (file.classes || 0));
+              const col = 3 + i * 2;
+              const row = 3 + i;
+              placeIsoBuilding(col, row, floors, '#598BAF');
+            });
+          }
+        }
+
+        // Listen for AST_DATA messages from the extension
+        window.addEventListener('message', event => {
+          const msg = event.data;
+          if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
+            fileData = msg.payload.files;
+            render();
+          }
         });
 
-        html += '</ul>';
-        container.innerHTML = html;
-      }
+        window.addEventListener('resize', () => {
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+          render();
+        });
 
-      //notify extension that webview is ready
-      vscode.postMessage({
-        type: 'WEBVIEW_READY',
-        payload: { status: 'ready' }
-      });
-    </script>
-  </body>
-</html>
-`;
+        render();
+
+        vscode.postMessage({
+          type: 'WEBVIEW_READY',
+          payload: { status: 'ready' }
+        });
+      </script>
+    </body>
+    </html>
+  `;
 }
 
 
