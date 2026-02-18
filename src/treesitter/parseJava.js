@@ -47,9 +47,13 @@ function summarizeAST(rootNode, fileName) {
 
 //walk the AST and count relevant node types
   function walk(node) {
-    if (node.type === "class_declaration") classes++;
-    if (node.type === "method_declaration") functions++;
+    if (node.type === "class_declaration"){
+        classes++;
+    }
 
+    if (node.type === "method_declaration"){
+        functions++;
+    }
     node.children.forEach(walk);
   }
 
