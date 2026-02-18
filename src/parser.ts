@@ -1,36 +1,51 @@
 import * as vscode from 'vscode';
+import { initParser, extractClasses, ClassInfo } from './parser/javaExtractor';
 import { FileParseStore } from './state';
 
-/**
- * Lightweight, testable text-only parser helper. AST team will replace this.
- */
-export function parseFromText(text: string) {
-	return {
-		length: text.length,
-		snippet: text.slice(0, 200),
-		generatedAt: new Date().toISOString(),
-	};
+let initialized = false;
+
+/** Initializes the TreeSitter Java parser once. Safe to call multiple times. */
+export async function ensureInitialized(): Promise<void> {
+  if (!initialized) {
+    await initParser();
+    initialized = true;
+  }
+}
+
+/** Reads a Java file from the workspace and extracts its classes via TreeSitter. */
+export async function parseJavaFile(uri: vscode.Uri): Promise<ClassInfo[]> {
+  await ensureInitialized();
+  const bytes = await vscode.workspace.fs.readFile(uri);
+  const text = new TextDecoder().decode(bytes);
+  return extractClasses(text);
 }
 
 /**
- * Read file from workspace and "parse" it (placeholder) returning an object.
+ * Orchestrator: mark pending, parse, store, and return results.
+ * Also returns class names that were in the store before this parse but are no longer
+ * present — these are classes that were removed/renamed in the file.
  */
-export async function parseJavaFile(uri: vscode.Uri) {
-	const bytes = await vscode.workspace.fs.readFile(uri);
-	const text = new TextDecoder().decode(bytes);
-	return parseFromText(text);
-}
+export async function parseAndStore(
+  uri: vscode.Uri,
+  store: FileParseStore
+): Promise<{ changed: ClassInfo[]; removed: string[] }> {
+  const before = store.get(uri);
+  const oldClasses: ClassInfo[] = before?.data ?? [];
 
-/**
- * Orchestrator: mark pending, parse, and store results. Errors are logged.
- */
-export async function parseAndStore(uri: vscode.Uri, store: FileParseStore) {
-	store.markPending(uri);
-	try {
-		const parsed = await parseJavaFile(uri);
-		store.setParsed(uri, parsed);
-		console.log('Parsed and stored for', uri.fsPath);
-	} catch (err) {
-		console.error('Parsing failed for', uri.fsPath, err);
-	}
+  store.markPending(uri);
+  try {
+    const classes = await parseJavaFile(uri);
+    store.setParsed(uri, classes);
+
+    // Class names present before but absent now were removed/renamed
+    const removedNames = oldClasses
+      .map(c => c.Classname)
+      .filter(name => !classes.some(c => c.Classname === name));
+
+    console.log(`Parsed ${uri.fsPath}: ${classes.length} class(es), ${removedNames.length} removed`);
+    return { changed: classes, removed: removedNames };
+  } catch (err) {
+    console.error('Parsing failed for', uri.fsPath, err);
+    return { changed: [], removed: [] };
+  }
 }

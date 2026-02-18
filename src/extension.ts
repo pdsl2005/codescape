@@ -2,17 +2,38 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { FileParseStore } from './state';
-import { parseAndStore } from './parser';
-import * as path from 'path';
+import { parseAndStore, ensureInitialized } from './parser';
+import { ClassInfo } from './parser/javaExtractor';
+import { buildGraph, getRelated } from './relations';
+
+// Builds the PARTIAL_STATE payload from changed classes, removed class names,
+// and the current store. Related classes are found via the relationship graph.
+function buildPartialStatePayload(
+  changedClasses: ClassInfo[],
+  removedNames: string[],
+  store: FileParseStore
+): { changed: ClassInfo[]; related: ClassInfo[]; removed: string[] } {
+  const allClasses = store.snapshot().flatMap(e => e.entry.data ?? []);
+  const graph = buildGraph(allClasses);
+  const changedNames = changedClasses.map(c => c.Classname);
+  const relatedNames = getRelated([...changedNames, ...removedNames], graph);
+  const relatedClasses = allClasses.filter(c => relatedNames.includes(c.Classname));
+  return { changed: changedClasses, related: relatedClasses, removed: removedNames };
+}
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
+	// Initialise the TreeSitter Java parser once before any file is parsed
+	await ensureInitialized();
 
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
 	//console.log('Congratulations, your extension "codescape" is now active!');
 
+
+	// Panel is declared here so the file watcher can postMessage to it
+	let panel: vscode.WebviewPanel | undefined;
 
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with registerCommand
@@ -21,7 +42,7 @@ export function activate(context: vscode.ExtensionContext) {
 		// The code you place here will be executed every time your command is executed
 
 	// creating the web viewer panel in vscode
-	const panel = vscode.window.createWebviewPanel(
+	panel = vscode.window.createWebviewPanel(
 	// internal ID
   	'codescapeWebview', 
 	// title shown to user  
@@ -71,20 +92,27 @@ export function activate(context: vscode.ExtensionContext) {
 	// Simple in-memory store for parsed results
 	const store = new FileParseStore();
 
-	javaWatcher.onDidCreate((uri: vscode.Uri) => {
-		console.log('Java file created:', uri.fsPath);
-		// kick off parsing asynchronously
-		void parseAndStore(uri, store);
+	javaWatcher.onDidCreate(async (uri: vscode.Uri) => {
+		const { changed, removed } = await parseAndStore(uri, store);
+		const payload = buildPartialStatePayload(changed, removed, store);
+		console.log('PARTIAL_STATE [create]:', JSON.stringify(payload, null, 2));
+		panel?.webview.postMessage({ type: 'PARTIAL_STATE', payload });
 	});
 
-	javaWatcher.onDidChange((uri: vscode.Uri) => {
-		console.log('Java file changed:', uri.fsPath);
-		void parseAndStore(uri, store);
+	javaWatcher.onDidChange(async (uri: vscode.Uri) => {
+		const { changed, removed } = await parseAndStore(uri, store);
+		const payload = buildPartialStatePayload(changed, removed, store);
+		console.log('PARTIAL_STATE [change]:', JSON.stringify(payload, null, 2));
+		panel?.webview.postMessage({ type: 'PARTIAL_STATE', payload });
 	});
 
 	javaWatcher.onDidDelete((uri: vscode.Uri) => {
-		console.log('Java file deleted:', uri.fsPath);
+		const before = store.get(uri);
+		const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
 		store.remove(uri);
+		const payload = buildPartialStatePayload([], removedNames, store);
+		console.log('PARTIAL_STATE [delete]:', JSON.stringify(payload, null, 2));
+		panel?.webview.postMessage({ type: 'PARTIAL_STATE', payload });
 	});
 
 	// Expose a command to dump the current parse store snapshot (useful for manual verification)
@@ -103,7 +131,7 @@ export function activate(context: vscode.ExtensionContext) {
 async function workspaceScan(){
 	//TODO
 	//Get all java files not in exlclude
-	const files = await getJavaFiles();
+	const _files = await getJavaFiles();
 		
 }
 
@@ -281,12 +309,18 @@ function getWebviewContent() {
           }
         }
 
-        // Listen for AST_DATA messages from the extension
+        // Listen for messages from the extension
         window.addEventListener('message', event => {
           const msg = event.data;
           if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
             fileData = msg.payload.files;
             render();
+          } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
+            const { changed, related, removed } = msg.payload;
+            console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
+            console.log('[PARTIAL_STATE] related:', related.map(c => c.Classname));
+            console.log('[PARTIAL_STATE] removed:', removed);
+            // TODO: update individual buildings instead of full re-render
           }
         });
 
