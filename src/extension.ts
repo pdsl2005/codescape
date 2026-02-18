@@ -8,6 +8,7 @@ import * as path from 'path';
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+	console.log("CODESCAPE ACTIVATED");
 
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
@@ -117,7 +118,7 @@ async function workspaceScan(){
  * @returns An array of the uris for all the .java files not mentioned in .exclude
  */
 async function getJavaFiles(): Promise<vscode.Uri[]>{
-	console.log("scanning files....")
+	console.log("scanning files....");
 	const excludeUri = await vscode.workspace.findFiles(".exclude");
 	let excludeFilter = null;
 	//if there is an exclude file add them to excludeFiles array
@@ -307,6 +308,7 @@ function getWebviewContent() {
     </html>
   `;
 }
+
 
 
 // This method is called when your extension is deactivated
