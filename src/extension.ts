@@ -3,6 +3,8 @@
 import * as vscode from 'vscode';
 import { FileParseStore } from './state';
 import { parseAndStore } from './parser';
+import { initParser, extractClasses } from './parser/javaExtractor';
+import type { FullStateMessage, ExtensionMessage } from './types/messages';
 import * as path from 'path';
 
 // This method is called when your extension is activated
@@ -36,25 +38,15 @@ export function activate(context: vscode.ExtensionContext) {
 	// html content for the web viewer
 	panel.webview.html = getWebviewContent();
 
-	//listen for messages FROM the webview
-	panel.webview.onDidReceiveMessage(message => {
-      console.log('Received from webview:', message);
-    });
-
-	//send mock data TO the webview
-    panel.webview.postMessage({
-      type: 'AST_DATA',
-      payload: {
-        files: [
-          {
-            name: 'App.tsx',
-            lines: 120,
-            functions: 4,
-            classes: 2
-          }
-        ]
-      }
-	  });
+	// Listen for messages FROM the webview (handshake: wait for READY before sending state)
+	panel.webview.onDidReceiveMessage(async (message: ExtensionMessage) => {
+		console.log('Received from webview:', message);
+		if (message.type !== 'READY') {
+			return;
+		}
+		// Pipeline: FileDiscovery → Parser → FULL_STATE
+		await sendFullStateToWebview(panel);
+	});
 
 		// Display a message box to the user
 		//vscode.window.showInformationMessage('Hello World from codescape!');
@@ -98,6 +90,45 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(javaWatcher);
 	context.subscriptions.push(scan);
+}
+
+/**
+ * Runs FileDiscovery → Parser, then sends a FULL_STATE message to the webview.
+ * Handles empty workspace (status: "empty") and per-file parser errors (top-level errors array).
+ */
+async function sendFullStateToWebview(panel: vscode.WebviewPanel): Promise<void> {
+	await initParser();
+	const uris = await getJavaFiles();
+	const files: FullStateMessage['payload']['files'] = [];
+	const errors: FullStateMessage['payload']['errors'] = [];
+
+	for (const uri of uris) {
+		try {
+			const bytes = await vscode.workspace.fs.readFile(uri);
+			const text = new TextDecoder().decode(bytes);
+			const classes = extractClasses(text);
+			files.push({ path: uri.fsPath, classes });
+		} catch (e) {
+			errors.push({
+				path: uri.fsPath,
+				message: e instanceof Error ? e.message : String(e),
+			});
+		}
+	}
+
+	const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	const status = files.length === 0 && errors.length === 0 ? 'empty' : 'ok';
+	const message: FullStateMessage = {
+		type: 'FULL_STATE',
+		payload: {
+			files,
+			rootPath,
+			timestamp: new Date().toISOString(),
+			status,
+			errors,
+		},
+	};
+	panel.webview.postMessage(message);
 }
 
 async function workspaceScan(){
@@ -271,9 +302,11 @@ function getWebviewContent() {
             placeIsoBuilding(5, 5, 5, '#8B5CF6');
             placeIsoBuilding(7, 3, 2, '#10B981');
           } else {
-            // height based on class size (functions + classes)
+            // FULL_STATE: file has path + classes[]; height from class count and method count
             fileData.forEach((file, i) => {
-              const floors = Math.max(1, (file.functions || 0) + (file.classes || 0));
+              const classCount = file.classes ? file.classes.length : 0;
+              const methodCount = file.classes ? file.classes.reduce(function (n, c) { return n + (c.Methods ? c.Methods.length : 0); }, 0) : 0;
+              const floors = Math.max(1, classCount + methodCount);
               const col = 3 + i * 2;
               const row = 3 + i;
               placeIsoBuilding(col, row, floors, '#598BAF');
@@ -281,10 +314,19 @@ function getWebviewContent() {
           }
         }
 
-        // Listen for AST_DATA messages from the extension
+        // Listen for FULL_STATE (and legacy AST_DATA) from the extension
         window.addEventListener('message', event => {
           const msg = event.data;
-          if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
+          if (msg.type === 'FULL_STATE' && msg.payload) {
+            fileData = msg.payload.files || [];
+            if (msg.payload.status === 'empty') {
+              // Frontend can show empty state; for now still call render()
+            }
+            if (msg.payload.errors && msg.payload.errors.length > 0) {
+              console.warn('Parse errors:', msg.payload.errors);
+            }
+            render();
+          } else if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
             fileData = msg.payload.files;
             render();
           }
@@ -298,10 +340,8 @@ function getWebviewContent() {
 
         render();
 
-        vscode.postMessage({
-          type: 'WEBVIEW_READY',
-          payload: { status: 'ready' }
-        });
+        // Handshake: tell extension we are ready so it sends FULL_STATE (avoids dropped messages)
+        vscode.postMessage({ type: 'READY' });
       </script>
     </body>
     </html>
