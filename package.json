@@ -21,7 +21,16 @@
         "command": "codescape.scan",
         "title": "Codescape Scan"
       }
-    ]
+    ],
+     "views": {
+        "explorer": [
+            {
+                "type": "webview",
+                "id": "codescape.Cityview",
+                "name": "Codescape City"
+            }
+        ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
