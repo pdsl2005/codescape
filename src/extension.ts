@@ -98,6 +98,17 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(javaWatcher);
 	context.subscriptions.push(scan);
+
+  context.subscriptions.push(dumpDisposable);
+  context.subscriptions.push(javaWatcher);
+  context.subscriptions.push(scan);
+
+  // sidebar view
+  const provider = new CodescapeViewProvider();
+  context.subscriptions.push(
+      vscode.window.registerWebviewViewProvider('codescape.Cityview', provider)
+  );
+  
 }
 
 async function workspaceScan(){
@@ -133,6 +144,14 @@ async function getJavaFiles(): Promise<vscode.Uri[]>{
 	return javaFiles;
 }
 
+// Sidebar view provider
+class CodescapeViewProvider implements vscode.WebviewViewProvider {
+    resolveWebviewView(webviewView: vscode.WebviewView) {
+        webviewView.webview.options = { enableScripts: true };
+        webviewView.webview.html = getWebviewContent();
+    }
+}
+
 // new canvas-based city visualization that renders an isometric grid and buildings from AST data
 function getWebviewContent() {
   return `
@@ -159,6 +178,7 @@ function getWebviewContent() {
         const TILE_L = 50;
         const offsetX = canvas.width / 2;
         const offsetY = 100;
+        let zoomLevel = 1;
 
         //isometric grid rendering (from renderer.js)
 
@@ -264,14 +284,18 @@ function getWebviewContent() {
 
         function render() {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-          drawIsoGrid(ctx, 10, 10, TILE_L, offsetX, offsetY);
 
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.scale(zoomLevel, zoomLevel);
+          ctx.translate(-canvas.width / 2, -canvas.height / 2);
+
+          drawIsoGrid(ctx, 10, 10, TILE_L, offsetX, offsetY);
           if (fileData.length === 0) {
             placeIsoBuilding(3, 3, 3, '#598BAF');
             placeIsoBuilding(5, 5, 5, '#8B5CF6');
             placeIsoBuilding(7, 3, 2, '#10B981');
           } else {
-            // height based on class size (functions + classes)
             fileData.forEach((file, i) => {
               const floors = Math.max(1, (file.functions || 0) + (file.classes || 0));
               const col = 3 + i * 2;
@@ -279,13 +303,13 @@ function getWebviewContent() {
               placeIsoBuilding(col, row, floors, '#598BAF');
             });
           }
-          
-          // Test UML box
           drawUmlBox(ctx, 50, 50, {
             name: 'App',
             fields: ['count: int', 'name: String'],
             methods: ['getName()', 'setName()', 'toString()', 'run()']
           });
+
+          ctx.restore();
         }
 
         // Listen for AST_DATA messages from the extension
@@ -412,6 +436,17 @@ function getWebviewContent() {
           height: boxHeight
         };
       }
+        // Zoom controls
+
+        canvas.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          if (e.deltaY < 0) {
+            zoomLevel = Math.min(zoomLevel * 1.1, 3);   // zoom in, max 3x
+          } else {
+            zoomLevel = Math.max(zoomLevel * 0.9, 0.3);  // zoom out, min 0.3x
+          }
+          render();
+        });
 
       </script>
     </body>
