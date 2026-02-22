@@ -2,47 +2,56 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { FileParseStore } from './state';
-import { parseAndStore } from './parser';
+import { parseAndStore, initializeParser } from './parser';
 import * as path from 'path';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
-	console.log("CODESCAPE ACTIVATED");
+export async function activate(context: vscode.ExtensionContext) {
+  console.log("CODESCAPE ACTIVATED");
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	//console.log('Congratulations, your extension "codescape" is now active!');
+  // Initialize the AST parser at startup
+  try {
+    await initializeParser();
+  } catch (err) {
+    console.error('Failed to initialize parser on startup:', err);
+    vscode.window.showErrorMessage('Codescape: Failed to initialize parser');
+    return;
+  }
+
+  // Use the console to output diagnostic information (console.log) and errors (console.error)
+  // This line of code will only be executed once when your extension is activated
+  //console.log('Congratulations, your extension "codescape" is now active!');
 
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('codescape.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
+  // The command has been defined in the package.json file
+  // Now provide the implementation of the command with registerCommand
+  // The commandId parameter must match the command field in package.json
+  const disposable = vscode.commands.registerCommand('codescape.helloWorld', () => {
+    // The code you place here will be executed every time your command is executed
 
-	// creating the web viewer panel in vscode
-	const panel = vscode.window.createWebviewPanel(
-	// internal ID
-  	'codescapeWebview', 
-	// title shown to user  
-  	'Codescape',          
-  	vscode.ViewColumn.One,
-  	{
-		// lets the webview run JavaScript
-    	enableScripts: true 
-  	}
-	);
+    // creating the web viewer panel in vscode
+    const panel = vscode.window.createWebviewPanel(
+      // internal ID
+      'codescapeWebview',
+      // title shown to user  
+      'Codescape',
+      vscode.ViewColumn.One,
+      {
+        // lets the webview run JavaScript
+        enableScripts: true
+      }
+    );
 
-	// html content for the web viewer
-	panel.webview.html = getWebviewContent();
+    // html content for the web viewer
+    panel.webview.html = getWebviewContent();
 
-	//listen for messages FROM the webview
-	panel.webview.onDidReceiveMessage(message => {
+    //listen for messages FROM the webview
+    panel.webview.onDidReceiveMessage(message => {
       console.log('Received from webview:', message);
     });
 
-	//send mock data TO the webview
+    //send mock data TO the webview
     panel.webview.postMessage({
       type: 'AST_DATA',
       payload: {
@@ -55,57 +64,112 @@ export function activate(context: vscode.ExtensionContext) {
           }
         ]
       }
-	  });
+    });
 
-		// Display a message box to the user
-		//vscode.window.showInformationMessage('Hello World from codescape!');
-	});
-	const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan());
+    // Display a message box to the user
+    //vscode.window.showInformationMessage('Hello World from codescape!');
+  });
+  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store));
 
-	
 
-	context.subscriptions.push(disposable);
 
-	// File watcher for .java files
-	const javaWatcher = vscode.workspace.createFileSystemWatcher('**/*.java');
+  context.subscriptions.push(disposable);
 
-	// Simple in-memory store for parsed results
-	const store = new FileParseStore();
+  // File watcher for .java files
+  const javaWatcher = vscode.workspace.createFileSystemWatcher('**/*.java');
 
-	javaWatcher.onDidCreate((uri: vscode.Uri) => {
-		console.log('Java file created:', uri.fsPath);
-		// kick off parsing asynchronously
-		void parseAndStore(uri, store);
-	});
+  // Simple in-memory store for parsed results
+  const store = new FileParseStore();
 
-	javaWatcher.onDidChange((uri: vscode.Uri) => {
-		console.log('Java file changed:', uri.fsPath);
-		void parseAndStore(uri, store);
-	});
+  javaWatcher.onDidCreate((uri: vscode.Uri) => {
+    console.log('Java file created:', uri.fsPath);
+    // kick off parsing asynchronously
+    void parseAndStore(uri, store);
+  });
 
-	javaWatcher.onDidDelete((uri: vscode.Uri) => {
-		console.log('Java file deleted:', uri.fsPath);
-		store.remove(uri);
-	});
+  javaWatcher.onDidChange((uri: vscode.Uri) => {
+    console.log('Java file changed:', uri.fsPath);
+    void parseAndStore(uri, store);
+  });
 
-	// Expose a command to dump the current parse store snapshot (useful for manual verification)
-	const dumpDisposable = vscode.commands.registerCommand('codescape.dumpParseStore', () => {
-		const snap = store.snapshot();
-		console.log('Parse store snapshot:', JSON.stringify(snap, null, 2));
-		vscode.window.showInformationMessage(`Parse store contains ${snap.length} entries (see console).`);
-	});
+  javaWatcher.onDidDelete((uri: vscode.Uri) => {
+    console.log('Java file deleted:', uri.fsPath);
+    store.remove(uri);
+  });
 
-	context.subscriptions.push(dumpDisposable);
+  // Expose a command to dump the current parse store snapshot (useful for manual verification)
+  const dumpDisposable = vscode.commands.registerCommand('codescape.dumpParseStore', () => {
+    const snap = store.snapshot();
+    console.log('Parse store snapshot:', JSON.stringify(snap, null, 2));
+    vscode.window.showInformationMessage(`Parse store contains ${snap.length} entries (see console).`);
+  });
 
-	context.subscriptions.push(javaWatcher);
-	context.subscriptions.push(scan);
+  // Expose a command to export the parse store to a JSON file in the workspace root
+  const exportDisposable = vscode.commands.registerCommand('codescape.exportParseStore', async () => {
+    try {
+      const snap = store.snapshot();
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showErrorMessage('No workspace folder is open.');
+        return;
+      }
+
+      const outputPath = path.join(workspaceFolders[0].uri.fsPath, 'codescape-output.json');
+      const outputUri = vscode.Uri.file(outputPath);
+
+      // Convert to exportable format with better structure
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        totalFiles: snap.length,
+        files: snap.map(({ uri, entry }) => ({
+          file: uri,
+          status: entry.status,
+          classes: entry.status === 'parsed' ? entry.data : null
+        }))
+      };
+
+      const encoder = new TextEncoder();
+      await vscode.workspace.fs.writeFile(outputUri, encoder.encode(JSON.stringify(exportData, null, 2)));
+
+      vscode.window.showInformationMessage(`Exported parse store to ${outputPath}`);
+      console.log(`Parse store exported to: ${outputPath}`);
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed to export parse store: ${err}`);
+      console.error('Export failed:', err);
+    }
+  });
+
+  context.subscriptions.push(dumpDisposable);
+  context.subscriptions.push(exportDisposable);
+
+  context.subscriptions.push(javaWatcher);
+  context.subscriptions.push(scan);
 }
 
-async function workspaceScan(){
-	//TODO
-	//Get all java files not in exlclude
-	const files = await getJavaFiles();
-		
+async function workspaceScan(store: FileParseStore) {
+  //Get all java files not in exclude
+  const files = await getJavaFiles();
+
+  console.log(`Found ${files.length} Java files. Starting parse...`);
+  vscode.window.showInformationMessage(`Codescape: Scanning and parsing ${files.length} Java files...`);
+
+  let successCount = 0;
+  let failureCount = 0;
+
+  // Parse all files sequentially to avoid overwhelming the parser
+  for (const uri of files) {
+    try {
+      await parseAndStore(uri, store);
+      successCount++;
+    } catch (err) {
+      failureCount++;
+      console.error(`Failed to parse ${uri.fsPath}:`, err);
+    }
+  }
+
+  const snap = store.snapshot();
+  console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
+  vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
 }
 
 
@@ -117,21 +181,21 @@ async function workspaceScan(){
  * 
  * @returns An array of the uris for all the .java files not mentioned in .exclude
  */
-async function getJavaFiles(): Promise<vscode.Uri[]>{
-	console.log("scanning files....");
-	const excludeUri = await vscode.workspace.findFiles(".exclude");
-	let excludeFilter = null;
-	//if there is an exclude file add them to excludeFiles array
-	if(excludeUri.length > 0){
-		const content = await vscode.workspace.fs.readFile(excludeUri[0]);
-		let decoded = new TextDecoder("utf-8").decode(content);
-		//split by newline, remove newline and\r characters and ensure no empty lines
-		let excludeFiles = decoded.split('\n').map(line => line.trim()).filter(line => line.trim() !== '');
-		excludeFilter = "{" + excludeFiles.join(",") + "}";
-	}
-	//get all java files and exclude ones in exclude filter
-	let javaFiles = await vscode.workspace.findFiles("**/*.java",excludeFilter);
-	return javaFiles;
+async function getJavaFiles(): Promise<vscode.Uri[]> {
+  console.log("scanning files....");
+  const excludeUri = await vscode.workspace.findFiles(".exclude");
+  let excludeFilter = null;
+  //if there is an exclude file add them to excludeFiles array
+  if (excludeUri.length > 0) {
+    const content = await vscode.workspace.fs.readFile(excludeUri[0]);
+    let decoded = new TextDecoder("utf-8").decode(content);
+    //split by newline, remove newline and\r characters and ensure no empty lines
+    let excludeFiles = decoded.split('\n').map(line => line.trim()).filter(line => line.trim() !== '');
+    excludeFilter = "{" + excludeFiles.join(",") + "}";
+  }
+  //get all java files and exclude ones in exclude filter
+  let javaFiles = await vscode.workspace.findFiles("**/*.java", excludeFilter);
+  return javaFiles;
 }
 
 // new canvas-based city visualization that renders an isometric grid and buildings from AST data
@@ -312,4 +376,4 @@ function getWebviewContent() {
 
 
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }
