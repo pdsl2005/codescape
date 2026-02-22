@@ -22,19 +22,17 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// creating the web viewer panel in vscode
 	const panel = vscode.window.createWebviewPanel(
-	// internal ID
-  	'codescapeWebview', 
-	// title shown to user  
-  	'Codescape',          
-  	vscode.ViewColumn.One,
-  	{
-		// lets the webview run JavaScript
-    	enableScripts: true 
-  	}
-	);
+    'codescapeWebview',
+    'Codescape',
+    vscode.ViewColumn.One,
+    {
+        enableScripts: true,
+        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'src', 'webview')]
+    }
+  );
 
 	// html content for the web viewer
-	panel.webview.html = getWebviewContent();
+	panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
 
 	//listen for messages FROM the webview
 	panel.webview.onDidReceiveMessage(message => {
@@ -94,17 +92,12 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage(`Parse store contains ${snap.length} entries (see console).`);
 	});
 
-	context.subscriptions.push(dumpDisposable);
-
-	context.subscriptions.push(javaWatcher);
-	context.subscriptions.push(scan);
-
   context.subscriptions.push(dumpDisposable);
   context.subscriptions.push(javaWatcher);
   context.subscriptions.push(scan);
-
+  
   // sidebar view
-  const provider = new CodescapeViewProvider();
+  const provider = new CodescapeViewProvider(context.extensionUri);
   context.subscriptions.push(
       vscode.window.registerWebviewViewProvider('codescape.Cityview', provider)
   );
@@ -144,16 +137,27 @@ async function getJavaFiles(): Promise<vscode.Uri[]>{
 	return javaFiles;
 }
 
-// Sidebar view provider
+// sidebar view
 class CodescapeViewProvider implements vscode.WebviewViewProvider {
+    constructor(private extensionUri: vscode.Uri) {}
     resolveWebviewView(webviewView: vscode.WebviewView) {
-        webviewView.webview.options = { enableScripts: true };
-        webviewView.webview.html = getWebviewContent();
+        webviewView.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
+        };
+        webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
     }
 }
 
 // new canvas-based city visualization that renders an isometric grid and buildings from AST data
-function getWebviewContent() {
+function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
+  const rendererUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, 'src', 'webview', 'renderer.js')
+  );
+  const umlUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, 'src', 'webview', 'uml.js')
+  );
+
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -164,9 +168,9 @@ function getWebviewContent() {
       </style>
     </head>
     <body>
-      <!-- canvas element in webview -->
       <canvas id="cityCanvas"></canvas>
-
+      <script src="${rendererUri}"></script>
+      <script src="${umlUri}"></script>
       <script>
         const vscode = acquireVsCodeApi();
         const canvas = document.getElementById('cityCanvas');
@@ -179,107 +183,6 @@ function getWebviewContent() {
         const offsetX = canvas.width / 2;
         const offsetY = 100;
         let zoomLevel = 1;
-
-        //isometric grid rendering (from renderer.js)
-
-        function drawIsoGrid(ctx, rows, cols, size, offsetX, offsetY) {
-          ctx.strokeStyle = '#2c2c2c';
-          var tileW = size;
-          var tileH = size / 2;
-
-          for (let row = 0; row < rows; row++) {
-            for (let col = 0; col < cols; col++) {
-              var isoX = (col - row) * tileW / 2 + offsetX;
-              var isoY = (col + row) * tileH / 2 + offsetY;
-
-              ctx.beginPath();
-              ctx.moveTo(isoX, isoY);
-              ctx.lineTo(isoX + tileW / 2, isoY + tileH / 2);
-              ctx.lineTo(isoX, isoY + tileH);
-              ctx.lineTo(isoX - tileW / 2, isoY + tileH / 2);
-              ctx.closePath();
-              ctx.stroke();
-            }
-          }
-        }
-
-        //building drawing based on class data
-
-        function shade(color, percent) {
-          var num = parseInt(color.slice(1), 16),
-              amt = Math.round(2.55 * percent),
-              R = (num >> 16) + amt,
-              G = ((num >> 8) & 0x00ff) + amt,
-              B = (num & 0x0000ff) + amt;
-          return (
-            '#' +
-            (
-              0x1000000 +
-              (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
-              (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
-              (B < 255 ? (B < 1 ? 0 : B) : 255)
-            ).toString(16).slice(1)
-          );
-        }
-
-        function drawIsoCube(ctx, x, y, width, height, color) {
-          const depthX = width / 2;
-          const depthY = width / 4;
-
-          const bottom = { x: x,          y: y };
-          const right  = { x: x + depthX, y: y - depthY };
-          const top    = { x: x,          y: y - 2 * depthY };
-          const left   = { x: x - depthX, y: y - depthY };
-
-          const bottomU = { x: bottom.x, y: bottom.y - height };
-          const rightU  = { x: right.x,  y: right.y  - height };
-          const topU    = { x: top.x,    y: top.y    - height };
-          const leftU   = { x: left.x,   y: left.y   - height };
-
-          // Left face
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.moveTo(left.x, left.y);
-          ctx.lineTo(bottom.x, bottom.y);
-          ctx.lineTo(bottomU.x, bottomU.y);
-          ctx.lineTo(leftU.x, leftU.y);
-          ctx.closePath();
-          ctx.fill();
-
-          // Right face
-          ctx.fillStyle = shade(color, -20);
-          ctx.beginPath();
-          ctx.moveTo(right.x, right.y);
-          ctx.lineTo(bottom.x, bottom.y);
-          ctx.lineTo(bottomU.x, bottomU.y);
-          ctx.lineTo(rightU.x, rightU.y);
-          ctx.closePath();
-          ctx.fill();
-
-          // Top face
-          ctx.fillStyle = shade(color, 20);
-          ctx.beginPath();
-          ctx.moveTo(topU.x, topU.y);
-          ctx.lineTo(rightU.x, rightU.y);
-          ctx.lineTo(bottomU.x, bottomU.y);
-          ctx.lineTo(leftU.x, leftU.y);
-          ctx.closePath();
-          ctx.fill();
-        }
-
-        function drawIsoBuilding(ctx, baseX, baseY, floors, size, color) {
-          for (let i = 0; i < floors; i++) {
-            drawIsoCube(ctx, baseX, baseY - i * size / 2, size, size, color);
-          }
-        }
-
-        function placeIsoBuilding(col, row, floors, color) {
-          var isoX = (col - row) * TILE_L / 2 + offsetX;
-          var isoY = (col + row) * TILE_L / 4 + offsetY;
-          drawIsoBuilding(ctx, isoX, isoY + TILE_L / 2, floors, TILE_L, color || '#598BAF');
-        }
-
-        // store file data received from the extension
         let fileData = [];
 
         function render() {
@@ -292,15 +195,15 @@ function getWebviewContent() {
 
           drawIsoGrid(ctx, 10, 10, TILE_L, offsetX, offsetY);
           if (fileData.length === 0) {
-            placeIsoBuilding(3, 3, 3, '#598BAF');
-            placeIsoBuilding(5, 5, 5, '#8B5CF6');
-            placeIsoBuilding(7, 3, 2, '#10B981');
+            placeIsoBuilding(ctx, 3, 3, 3, '#598BAF', TILE_L, offsetX, offsetY);
+            placeIsoBuilding(ctx, 5, 5, 5, '#8B5CF6', TILE_L, offsetX, offsetY);
+            placeIsoBuilding(ctx, 7, 3, 2, '#10B981', TILE_L, offsetX, offsetY);
           } else {
             fileData.forEach((file, i) => {
               const floors = Math.max(1, (file.functions || 0) + (file.classes || 0));
               const col = 3 + i * 2;
               const row = 3 + i;
-              placeIsoBuilding(col, row, floors, '#598BAF');
+              placeIsoBuilding(ctx, col, row, floors, '#598BAF', TILE_L, offsetX, offsetY);
             });
           }
           drawUmlBox(ctx, 50, 50, {
@@ -312,7 +215,6 @@ function getWebviewContent() {
           ctx.restore();
         }
 
-        // Listen for AST_DATA messages from the extension
         window.addEventListener('message', event => {
           const msg = event.data;
           if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
@@ -327,127 +229,22 @@ function getWebviewContent() {
           render();
         });
 
+        canvas.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          if (e.deltaY < 0) {
+            zoomLevel = Math.min(zoomLevel * 1.1, 3);
+          } else {
+            zoomLevel = Math.max(zoomLevel * 0.9, 0.3);
+          }
+          render();
+        });
+
         render();
 
         vscode.postMessage({
           type: 'WEBVIEW_READY',
           payload: { status: 'ready' }
         });
-
-        //UML class diagram renderer
-        function drawUmlBox(ctx, x, y, classData, options) {
-          const config = {
-            padding: (options && options.padding) || 10,
-            lineHeight: (options && options.lineHeight) || 20,
-            fontSize: (options && options.fontSize) || 14,
-            headerFontSize: (options && options.headerFontSize) || 16,
-            maxWidth: (options && options.maxWidth) || null,
-            scale: (options && options.scale) || 1
-          };
-
-          const padding = config.padding * config.scale;
-          const lineHeight = config.lineHeight * config.scale;
-          const fontSize = config.fontSize * config.scale;
-          const headerFontSize = config.headerFontSize * config.scale;
-
-          ctx.font = headerFontSize + 'px monospace';
-
-          const allText = [
-            classData.name,
-            ...(classData.fields || []).map(f => '  - ' + f),
-            ...(classData.methods || []).map(m => '  + ' + m)
-          ];
-          const maxTextWidth = allText.reduce((max, text) => {
-            return Math.max(max, ctx.measureText(text).width);
-          }, 0);
-
-          let boxWidth = maxTextWidth + padding * 3;
-          if (config.maxWidth) {
-            boxWidth = Math.min(boxWidth, config.maxWidth);
-          }
-
-          const headerHeight = lineHeight + padding;
-          const fieldsHeight = (classData.fields || []).length * lineHeight + padding;
-          const methodsHeight = (classData.methods || []).length * lineHeight + padding;
-          const boxHeight = headerHeight + fieldsHeight + methodsHeight + padding;
-
-          // Draw background
-          ctx.fillStyle = '#1a1a2e';
-          ctx.fillRect(x, y, boxWidth, boxHeight);
-
-          // Draw border
-          ctx.strokeStyle = '#598BAF';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(x, y, boxWidth, boxHeight);
-
-          // Draw class name header background
-          ctx.fillStyle = '#598BAF';
-          ctx.fillRect(x + 1, y + 1, boxWidth - 2, headerHeight - 1);
-
-          // Draw class name text
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold ' + headerFontSize + 'px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText(classData.name, x + boxWidth / 2, y + lineHeight);
-
-          // Divider lines
-          ctx.strokeStyle = '#598BAF';
-
-          // Fields text
-          ctx.fillStyle = '#8B5CF6';
-
-          // Methods text
-          ctx.fillStyle = '#10B981';
-          // Draw line under header
-          let currentY = y + headerHeight;
-          ctx.beginPath();
-          ctx.moveTo(x, currentY);
-          ctx.lineTo(x + boxWidth, currentY);
-          ctx.strokeStyle = '#598BAF';
-          ctx.stroke();
-
-          // Draw fields
-          ctx.fillStyle = '#cccccc';
-          ctx.font = fontSize + 'px monospace';
-          ctx.textAlign = 'left';
-          (classData.fields || []).forEach((field) => {
-            currentY += lineHeight;
-            ctx.fillText('  - ' + field, x + padding, currentY);
-          });
-
-          // Draw line under fields
-          currentY += padding;
-          ctx.beginPath();
-          ctx.moveTo(x, currentY);
-          ctx.lineTo(x + boxWidth, currentY);
-          ctx.strokeStyle = '#598BAF';
-          ctx.stroke();
-
-          // Draw methods
-          ctx.fillStyle = '#cccccc';
-          (classData.methods || []).forEach((method) => {
-            currentY += lineHeight;
-            ctx.fillText('  + ' + method, x + padding, currentY);
-          });
-          return {
-          x: x,
-          y: y,
-          width: boxWidth,
-          height: boxHeight
-        };
-      }
-        // Zoom controls
-
-        canvas.addEventListener('wheel', (e) => {
-          e.preventDefault();
-          if (e.deltaY < 0) {
-            zoomLevel = Math.min(zoomLevel * 1.1, 3);   // zoom in, max 3x
-          } else {
-            zoomLevel = Math.max(zoomLevel * 0.9, 0.3);  // zoom out, min 0.3x
-          }
-          render();
-        });
-
       </script>
     </body>
     </html>
