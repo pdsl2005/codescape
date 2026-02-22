@@ -15,11 +15,11 @@
     "commands": [
       {
         "command": "codescape.helloWorld",
-        "title": "Hello World"
-      }, 
+        "title": "Codescape: Hello World"
+      },
       {
         "command": "codescape.scan",
-         "title": "Codescape Scan"
+        "title": "Codescape Scan"
       }
     ],
      "views": {
@@ -51,6 +51,7 @@
     "typescript-eslint": "^8.52.0"
   },
   "dependencies": {
+    "minimatch": "^10.1.2",
     "tree-sitter-java": "^0.23.5",
     "web-tree-sitter": "^0.26.5"
   }
