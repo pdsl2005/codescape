@@ -5,7 +5,7 @@ import * as path from 'path';
 // JSON output contract for each extracted class/interface
 export interface ClassInfo {
   Classname: string;
-  Methods: string[];  // Method signatures in format "methodName(paramType1, paramType2)" or "methodName()" for no params
+  Methods: MethodInfo[];  // Detailed method information
   Loc: number;
   Type: string;       // "public", "abstract", "final", "private", "protected", "interface", or "default"
   Extends: string | null;
@@ -29,6 +29,13 @@ export interface ConstructorInfo {
 export interface ParameterInfo {
   name: string;
   type: string;
+}
+
+export interface MethodInfo {
+  name: string;
+  parameters: string[]; // just types
+  returnType: string;
+  modifiers: string[];
 }
 
 let parser: Parser | null = null;
@@ -85,13 +92,14 @@ function extractCommonInfo(node: SyntaxNode): {
   name: string;
   loc: number;
   body: SyntaxNode | null;
-  methods: string[];
+  methods: MethodInfo[];
   fields: FieldInfo[];
 } {
   const name = node.childForFieldName('name')?.text ?? 'Unknown';
   const loc = node.endPosition.row - node.startPosition.row + 1;
   const body = node.childForFieldName('body');
-  const methods = extractMethods(body);
+  // Use detailed methods as the canonical `methods` representation
+  const methods = extractMethodsDetailed(body);
   const fields = extractFields(body);
 
   return { name, loc, body, methods, fields };
@@ -166,22 +174,35 @@ function determineType(modifiers: string[]): string {
   return 'default';
 }
 
-// Collects method signatures from a class_body or interface_body node.
-// Returns signatures in format "methodName(paramType1, paramType2)" or "methodName()" for no params.
-// This allows distinguishing method overloads (same name, different parameters).
-function extractMethods(bodyNode: SyntaxNode | null): string[] {
-  const methods: string[] = [];
+// (legacy extractMethods removed — Methods are now represented by MethodInfo via extractMethodsDetailed)
+
+// Detailed method extraction: returns MethodInfo objects with name, parameter types, return type and modifiers
+function extractMethodsDetailed(bodyNode: SyntaxNode | null): MethodInfo[] {
+  const methods: MethodInfo[] = [];
+  if (!bodyNode) { return methods; }
+
   for (const child of bodyNode.namedChildren) {
     if (child.type === 'method_declaration') {
-      const name = child.childForFieldName('name');
-      if (name) {
-        const parameters = child.childForFieldName('parameters');
-        const paramTypes = extractParameterTypes(parameters);
-        const signature = `${name.text}(${paramTypes.join(', ')})`;
-        methods.push(signature);
-      }
+      const nameNode = child.childForFieldName('name');
+      if (!nameNode) { continue; }
+
+      const parameters = child.childForFieldName('parameters');
+      const paramTypes = extractParameterTypes(parameters);
+
+      const returnTypeNode = child.childForFieldName('type');
+      const returnType = extractTypeName(returnTypeNode);
+
+      const modifiers = getModifiers(child);
+
+      methods.push({
+        name: nameNode.text,
+        parameters: paramTypes,
+        returnType: returnType || 'unknown',
+        modifiers
+      });
     }
   }
+
   return methods;
 }
 
@@ -189,9 +210,9 @@ function extractMethods(bodyNode: SyntaxNode | null): string[] {
 // Returns an array of type strings (e.g., ["int", "String", "List"]).
 function extractParameterTypes(parametersNode: SyntaxNode | null): string[] {
   if (!parametersNode) { return []; }
-  
+
   const paramTypes: string[] = [];
-  
+
   // formal_parameters contains formal_parameter nodes
   for (const child of parametersNode.namedChildren) {
     if (child.type === 'formal_parameter' || child.type === 'spread_parameter') {
@@ -205,44 +226,51 @@ function extractParameterTypes(parametersNode: SyntaxNode | null): string[] {
       }
     }
   }
-  
+
   return paramTypes;
 }
 
 // Extracts a type name from a type node (handles type_identifier, generic_type, etc.).
-function extractTypeName(typeNode: SyntaxNode): string | null {
-  if (!typeNode) { return null; }
-  
+// Returns null if the type cannot be determined.
+function extractTypeName(typeNode: SyntaxNode | null): string {
+  if (!typeNode) { return 'unknown'; }
+
+  // Primitive types like int, boolean, etc.
+  if (typeNode.type === 'integral_type' || typeNode.type === 'floating_point_type' ||
+    typeNode.type === 'boolean_type' || typeNode.type === 'void_type') {
+    return typeNode.text;
+  }
+
   // Handle simple type identifiers
   if (typeNode.type === 'type_identifier') {
     return typeNode.text;
   }
-  
+
   // Handle generic types like List<String> -> "List"
   if (typeNode.type === 'generic_type') {
     const baseType = typeNode.namedChildren.find((c: SyntaxNode) => c.type === 'type_identifier');
     if (baseType) {
       return baseType.text;
     }
+    return typeNode.text;
   }
-  
+
   // Handle scoped type identifiers like com.example.MyType
   if (typeNode.type === 'scoped_type_identifier') {
     return typeNode.text;
   }
-  
+
   // Handle array types like int[] -> "int[]"
   if (typeNode.type === 'array_type') {
     const elementType = typeNode.childForFieldName('element');
     if (elementType) {
       const baseName = extractTypeName(elementType);
-      return baseName ? `${baseName}[]` : null;
+      return baseName ? `${baseName}[]` : 'unknown[]';
     }
   }
-  
-  // Handle primitive types (int, boolean, etc.) - they appear as type_identifier
+
   // For other cases, try to get text representation
-  return typeNode.text || null;
+  return typeNode.text || 'unknown';
 }
 
 // Recursively collects type names from a superclass, super_interfaces, or extends_interfaces node.
@@ -317,39 +345,6 @@ function extractVariableDeclarators(node: SyntaxNode, type: string, modifiers: s
   }
 
   return fields;
-}
-
-// Extracts a single type name from a type node (handles primitives, identifiers, generics, arrays).
-function extractTypeName(typeNode: SyntaxNode | null): string {
-  if (!typeNode) { return 'unknown'; }
-
-  // Primitive types like int, boolean, etc.
-  if (typeNode.type === 'integral_type' || typeNode.type === 'floating_point_type' ||
-      typeNode.type === 'boolean_type' || typeNode.type === 'void_type') {
-    return typeNode.text;
-  }
-
-  // Simple type_identifier like String
-  if (typeNode.type === 'type_identifier') {
-    return typeNode.text;
-  }
-
-  // Generic type like List<String>
-  if (typeNode.type === 'generic_type') {
-    return typeNode.text;
-  }
-
-  // Scoped type like java.util.List
-  if (typeNode.type === 'scoped_type_identifier') {
-    return typeNode.text;
-  }
-
-  // Array type like String[]
-  if (typeNode.type === 'array_type') {
-    return typeNode.text;
-  }
-
-  return typeNode.text;
 }
 
 // Extracts constructor declarations from a class_body node.

@@ -65,6 +65,72 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage(`Parse store contains ${snap.length} entries (see console).`);
   });
 
+  // Expose a command to export the parse store to a JSON file in the workspace root
+  const exportDisposable = vscode.commands.registerCommand('codescape.exportParseStore', async () => {
+    try {
+      const snap = store.snapshot();
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showErrorMessage('No workspace folder is open.');
+        return;
+      }
+
+      const outputPath = path.join(workspaceFolders[0].uri.fsPath, 'codescape-output.json');
+      const outputUri = vscode.Uri.file(outputPath);
+
+      // Convert to exportable format with better structure
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        totalFiles: snap.length,
+        files: snap.map(({ uri, entry }) => ({
+          file: uri,
+          status: entry.status,
+          classes: entry.status === 'parsed' ? entry.data : null
+        }))
+      };
+
+      const encoder = new TextEncoder();
+      await vscode.workspace.fs.writeFile(outputUri, encoder.encode(JSON.stringify(exportData, null, 2)));
+
+      vscode.window.showInformationMessage(`Exported parse store to ${outputPath}`);
+      console.log(`Parse store exported to: ${outputPath}`);
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed to export parse store: ${err}`);
+      console.error('Export failed:', err);
+    }
+  });
+
+  context.subscriptions.push(dumpDisposable);
+  context.subscriptions.push(exportDisposable);
+
+  context.subscriptions.push(javaWatcher);
+  context.subscriptions.push(scan);
+}
+
+async function workspaceScan(store: FileParseStore) {
+  //Get all java files not in exclude
+  const files = await getJavaFiles();
+
+  console.log(`Found ${files.length} Java files. Starting parse...`);
+  vscode.window.showInformationMessage(`Codescape: Scanning and parsing ${files.length} Java files...`);
+
+  let successCount = 0;
+  let failureCount = 0;
+
+  // Parse all files sequentially to avoid overwhelming the parser
+  for (const uri of files) {
+    try {
+      await parseAndStore(uri, store);
+      successCount++;
+    } catch (err) {
+      failureCount++;
+      console.error(`Failed to parse ${uri.fsPath}:`, err);
+    }
+  }
+
+  const snap = store.snapshot();
+  console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
+  vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
   context.subscriptions.push(dumpDisposable);
   context.subscriptions.push(javaWatcher);
   context.subscriptions.push(scan);
