@@ -16,8 +16,21 @@
       {
         "command": "codescape.helloWorld",
         "title": "Codescape: Hello World"
+      },
+      {
+        "command": "codescape.scan",
+        "title": "Codescape Scan"
       }
-    ]
+    ],
+     "views": {
+        "explorer": [
+            {
+                "type": "webview",
+                "id": "codescape.Cityview",
+                "name": "Codescape City"
+            }
+        ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -38,6 +51,7 @@
     "typescript-eslint": "^8.52.0"
   },
   "dependencies": {
+    "minimatch": "^10.1.2",
     "tree-sitter-java": "^0.23.5",
     "web-tree-sitter": "^0.26.5"
   }

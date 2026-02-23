@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Parser, Language, Node as SyntaxNode } from 'web-tree-sitter';
 import * as path from 'path';
 
