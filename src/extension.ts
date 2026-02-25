@@ -2,143 +2,157 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { FileParseStore } from './state';
-import { parseAndStore } from './parser';
-import { initParser, extractClasses } from './parser/javaExtractor';
-import type { FullStateMessage, ExtensionMessage } from './types/messages';
+import { parseAndStore, ensureInitialized } from './parser';
+import { ClassInfo } from './parser/javaExtractor';
+import { buildGraph, getRelated } from './relations';
+import { minimatch } from 'minimatch';
 import * as path from 'path';
+
+import { JavaFileWatcher } from './JavaFileWatcher';
+// Builds the PARTIAL_STATE payload from changed classes, removed class names,
+// and the current store. Related classes are found via the relationship graph.
+function buildPartialStatePayload(
+  changedClasses: ClassInfo[],
+  removedNames: string[],
+  store: FileParseStore
+): { changed: ClassInfo[]; related: ClassInfo[]; removed: string[] } {
+  const allClasses = store.snapshot().flatMap(e => e.entry.data ?? []);
+  const graph = buildGraph(allClasses);
+  const changedNames = changedClasses.map(c => c.Classname);
+  const relatedNames = getRelated([...changedNames, ...removedNames], graph);
+  const relatedClasses = allClasses.filter(c => relatedNames.includes(c.Classname));
+  return { changed: changedClasses, related: relatedClasses, removed: removedNames };
+}
+
+
+
+
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+  console.log("CODESCAPE ACTIVATED");
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	//console.log('Congratulations, your extension "codescape" is now active!');
+  // Use the console to output diagnostic information (console.log) and errors (console.error)
+  // This line of code will only be executed once when your extension is activated
+  //console.log('Congratulations, your extension "codescape" is now active!');
+  
+  const panel = vscode.window.createWebviewPanel(
+    // internal ID
+    'codescapeWebview',
+    // title shown to user  
+    'Codescape',
+    vscode.ViewColumn.One,
+    {
+      // lets the webview run JavaScript
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'src', 'webview')]
+    }
+  );
 
+  // html content for the web viewer
+  panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('codescape.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
+  //listen for messages FROM the webview
+  panel.webview.onDidReceiveMessage(message => {
+    console.log('Received from webview:', message);
+  });
 
-	// creating the web viewer panel in vscode
-	const panel = vscode.window.createWebviewPanel(
-	// internal ID
-  	'codescapeWebview', 
-	// title shown to user  
-  	'Codescape',          
-  	vscode.ViewColumn.One,
-  	{
-		// lets the webview run JavaScript
-    	enableScripts: true 
-  	}
-	);
+  //send mock data TO the webview
+  panel.webview.postMessage({
+    type: 'AST_DATA',
+    payload: {
+      files: [
+        {
+          name: 'App.tsx',
+          lines: 120,
+          functions: 4,
+          classes: 2
+        }
+      ]
+    }
+  });
 
-	// html content for the web viewer
-	panel.webview.html = getWebviewContent();
+  const store = new FileParseStore();
+  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store));
 
-	// Listen for messages FROM the webview (handshake: wait for READY before sending state)
-	panel.webview.onDidReceiveMessage(async (message: ExtensionMessage) => {
-		console.log('Received from webview:', message);
-		if (message.type !== 'READY') {
-			return;
-		}
-		// Pipeline: FileDiscovery → Parser → FULL_STATE
-		await sendFullStateToWebview(panel);
-	});
+  const javaWatcher = new JavaFileWatcher(store);
+  javaWatcher.setPanel(panel);
 
-		// Display a message box to the user
-		//vscode.window.showInformationMessage('Hello World from codescape!');
-	});
-	const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan());
+  const dumpDisposable = vscode.commands.registerCommand('codescape.dumpParseStore', () => {
+    const snap = store.snapshot();
+    console.log('Parse store snapshot:', JSON.stringify(snap, null, 2));
+    vscode.window.showInformationMessage(`Parse store contains ${snap.length} entries (see console).`);
+  });
 
-	
+  // Expose a command to export the parse store to a JSON file in the workspace root
+  const exportDisposable = vscode.commands.registerCommand('codescape.exportParseStore', async () => {
+    try {
+      const snap = store.snapshot();
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showErrorMessage('No workspace folder is open.');
+        return;
+      }
 
-	context.subscriptions.push(disposable);
+      const outputPath = path.join(workspaceFolders[0].uri.fsPath, 'codescape-output.json');
+      const outputUri = vscode.Uri.file(outputPath);
 
-	// File watcher for .java files
-	const javaWatcher = vscode.workspace.createFileSystemWatcher('**/*.java');
+      // Convert to exportable format with better structure
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        totalFiles: snap.length,
+        files: snap.map(({ uri, entry }) => ({
+          file: uri,
+          status: entry.status,
+          classes: entry.status === 'parsed' ? entry.data : null
+        }))
+      };
 
-	// Simple in-memory store for parsed results
-	const store = new FileParseStore();
+      const encoder = new TextEncoder();
+      await vscode.workspace.fs.writeFile(outputUri, encoder.encode(JSON.stringify(exportData, null, 2)));
 
-	javaWatcher.onDidCreate((uri: vscode.Uri) => {
-		console.log('Java file created:', uri.fsPath);
-		// kick off parsing asynchronously
-		void parseAndStore(uri, store);
-	});
+      vscode.window.showInformationMessage(`Exported parse store to ${outputPath}`);
+      console.log(`Parse store exported to: ${outputPath}`);
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed to export parse store: ${err}`);
+      console.error('Export failed:', err);
+    }
+  });
 
-	javaWatcher.onDidChange((uri: vscode.Uri) => {
-		console.log('Java file changed:', uri.fsPath);
-		void parseAndStore(uri, store);
-	});
+  context.subscriptions.push(dumpDisposable);
+  context.subscriptions.push(exportDisposable);
 
-	javaWatcher.onDidDelete((uri: vscode.Uri) => {
-		console.log('Java file deleted:', uri.fsPath);
-		store.remove(uri);
-	});
-
-	// Expose a command to dump the current parse store snapshot (useful for manual verification)
-	const dumpDisposable = vscode.commands.registerCommand('codescape.dumpParseStore', () => {
-		const snap = store.snapshot();
-		console.log('Parse store snapshot:', JSON.stringify(snap, null, 2));
-		vscode.window.showInformationMessage(`Parse store contains ${snap.length} entries (see console).`);
-	});
-
-	context.subscriptions.push(dumpDisposable);
-
-	context.subscriptions.push(javaWatcher);
-	context.subscriptions.push(scan);
+  context.subscriptions.push(javaWatcher);
+  context.subscriptions.push(scan);
 }
 
-/**
- * Runs FileDiscovery → Parser, then sends a FULL_STATE message to the webview.
- * Handles empty workspace (status: "empty") and per-file parser errors (top-level errors array).
- */
-async function sendFullStateToWebview(panel: vscode.WebviewPanel): Promise<void> {
-	await initParser();
-	const uris = await getJavaFiles();
-	const files: FullStateMessage['payload']['files'] = [];
-	const errors: FullStateMessage['payload']['errors'] = [];
+async function workspaceScan(store: FileParseStore) {
+  //Get all java files not in exclude
+  const files = await getJavaFiles();
 
-	for (const uri of uris) {
-		try {
-			const bytes = await vscode.workspace.fs.readFile(uri);
-			const text = new TextDecoder().decode(bytes);
-			const classes = extractClasses(text);
-			files.push({ path: uri.fsPath, classes });
-		} catch (e) {
-			errors.push({
-				path: uri.fsPath,
-				message: e instanceof Error ? e.message : String(e),
-			});
-		}
-	}
+  console.log(`Found ${files.length} Java files. Starting parse...`);
+  vscode.window.showInformationMessage(`Codescape: Scanning and parsing ${files.length} Java files...`);
 
-	const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	const status = files.length === 0 && errors.length === 0 ? 'empty' : 'ok';
-	const message: FullStateMessage = {
-		type: 'FULL_STATE',
-		payload: {
-			files,
-			rootPath,
-			timestamp: new Date().toISOString(),
-			status,
-			errors,
-		},
-	};
-	panel.webview.postMessage(message);
+  let successCount = 0;
+  let failureCount = 0;
+
+  // Parse all files sequentially to avoid overwhelming the parser
+  for (const uri of files) {
+    try {
+      await parseAndStore(uri, store);
+      successCount++;
+    } catch (err) {
+      failureCount++;
+      console.error(`Failed to parse ${uri.fsPath}:`, err);
+    }
+  }
+
+  const snap = store.snapshot();
+  console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
+  vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
+ 
 }
-
-async function workspaceScan(){
-	//TODO
-	//Get all java files not in exlclude
-	const files = await getJavaFiles();
-		
-}
-
-
 
 /**
  * Gets all java files within the workspace excluding the ones mentioned in .exclude. 
@@ -147,25 +161,56 @@ async function workspaceScan(){
  * 
  * @returns An array of the uris for all the .java files not mentioned in .exclude
  */
-async function getJavaFiles(): Promise<vscode.Uri[]>{
-	console.log("scanning files....")
-	const excludeUri = await vscode.workspace.findFiles(".exclude");
-	let excludeFilter = null;
-	//if there is an exclude file add them to excludeFiles array
-	if(excludeUri.length > 0){
-		const content = await vscode.workspace.fs.readFile(excludeUri[0]);
-		let decoded = new TextDecoder("utf-8").decode(content);
-		//split by newline, remove newline and\r characters and ensure no empty lines
-		let excludeFiles = decoded.split('\n').map(line => line.trim()).filter(line => line.trim() !== '');
-		excludeFilter = "{" + excludeFiles.join(",") + "}";
-	}
-	//get all java files and exclude ones in exclude filter
-	let javaFiles = await vscode.workspace.findFiles("**/*.java",excludeFilter);
-	return javaFiles;
+async function getJavaFiles(): Promise<vscode.Uri[]> {
+  console.log("scanning files....")
+  const excludeUri = await vscode.workspace.findFiles(".exclude");
+  let excludeFilter = null;
+  //if there is an exclude file add them to excludeFiles array
+  if (excludeUri.length > 0) {
+    const content = await vscode.workspace.fs.readFile(excludeUri[0]);
+    let decoded = new TextDecoder("utf-8").decode(content);
+    //split by newline, remove newline and\r characters and ensure no empty lines
+    let excludeFiles = decoded.split('\n').map(line => line.trim()).filter(line => line.trim() !== '');
+    excludeFilter = "{" + excludeFiles.join(",") + "}";
+  }
+  //get all java files and exclude ones in exclude filter
+  let javaFiles = await vscode.workspace.findFiles("**/*.java", excludeFilter);
+  return javaFiles;
+}
+
+export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
+  const excludeUri = await vscode.workspace.findFiles(".exclude");
+  const path = vscode.workspace.asRelativePath(uri);
+  if (excludeUri.length === 0) {
+    return false;
+  }
+  const content = await vscode.workspace.fs.readFile(excludeUri[0]);
+  let decoded = new TextDecoder("utf-8").decode(content);
+  let excludeFiles = decoded.split('\n').map(line => line.trim()).filter(line => line.trim() !== '');
+  return excludeFiles.some(pattern => minimatch(path, pattern));
+}
+
+// sidebar view
+class CodescapeViewProvider implements vscode.WebviewViewProvider {
+    constructor(private extensionUri: vscode.Uri) {}
+    resolveWebviewView(webviewView: vscode.WebviewView) {
+        webviewView.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
+        };
+        webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
+    }
 }
 
 // new canvas-based city visualization that renders an isometric grid and buildings from AST data
-function getWebviewContent() {
+function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
+  const rendererUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, 'src', 'webview', 'renderer.js')
+  );
+  const umlUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, 'src', 'webview', 'uml.js')
+  );
+
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -176,9 +221,9 @@ function getWebviewContent() {
       </style>
     </head>
     <body>
-      <!-- canvas element in webview -->
       <canvas id="cityCanvas"></canvas>
-
+      <script src="${rendererUri}"></script>
+      <script src="${umlUri}"></script>
       <script>
         const vscode = acquireVsCodeApi();
         const canvas = document.getElementById('cityCanvas');
@@ -190,117 +235,22 @@ function getWebviewContent() {
         const TILE_L = 50;
         const offsetX = canvas.width / 2;
         const offsetY = 100;
-
-        //isometric grid rendering (from renderer.js)
-
-        function drawIsoGrid(ctx, rows, cols, size, offsetX, offsetY) {
-          ctx.strokeStyle = '#2c2c2c';
-          var tileW = size;
-          var tileH = size / 2;
-
-          for (let row = 0; row < rows; row++) {
-            for (let col = 0; col < cols; col++) {
-              var isoX = (col - row) * tileW / 2 + offsetX;
-              var isoY = (col + row) * tileH / 2 + offsetY;
-
-              ctx.beginPath();
-              ctx.moveTo(isoX, isoY);
-              ctx.lineTo(isoX + tileW / 2, isoY + tileH / 2);
-              ctx.lineTo(isoX, isoY + tileH);
-              ctx.lineTo(isoX - tileW / 2, isoY + tileH / 2);
-              ctx.closePath();
-              ctx.stroke();
-            }
-          }
-        }
-
-        //building drawing based on class data
-
-        function shade(color, percent) {
-          var num = parseInt(color.slice(1), 16),
-              amt = Math.round(2.55 * percent),
-              R = (num >> 16) + amt,
-              G = ((num >> 8) & 0x00ff) + amt,
-              B = (num & 0x0000ff) + amt;
-          return (
-            '#' +
-            (
-              0x1000000 +
-              (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
-              (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
-              (B < 255 ? (B < 1 ? 0 : B) : 255)
-            ).toString(16).slice(1)
-          );
-        }
-
-        function drawIsoCube(ctx, x, y, width, height, color) {
-          const depthX = width / 2;
-          const depthY = width / 4;
-
-          const bottom = { x: x,          y: y };
-          const right  = { x: x + depthX, y: y - depthY };
-          const top    = { x: x,          y: y - 2 * depthY };
-          const left   = { x: x - depthX, y: y - depthY };
-
-          const bottomU = { x: bottom.x, y: bottom.y - height };
-          const rightU  = { x: right.x,  y: right.y  - height };
-          const topU    = { x: top.x,    y: top.y    - height };
-          const leftU   = { x: left.x,   y: left.y   - height };
-
-          // Left face
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.moveTo(left.x, left.y);
-          ctx.lineTo(bottom.x, bottom.y);
-          ctx.lineTo(bottomU.x, bottomU.y);
-          ctx.lineTo(leftU.x, leftU.y);
-          ctx.closePath();
-          ctx.fill();
-
-          // Right face
-          ctx.fillStyle = shade(color, -20);
-          ctx.beginPath();
-          ctx.moveTo(right.x, right.y);
-          ctx.lineTo(bottom.x, bottom.y);
-          ctx.lineTo(bottomU.x, bottomU.y);
-          ctx.lineTo(rightU.x, rightU.y);
-          ctx.closePath();
-          ctx.fill();
-
-          // Top face
-          ctx.fillStyle = shade(color, 20);
-          ctx.beginPath();
-          ctx.moveTo(topU.x, topU.y);
-          ctx.lineTo(rightU.x, rightU.y);
-          ctx.lineTo(bottomU.x, bottomU.y);
-          ctx.lineTo(leftU.x, leftU.y);
-          ctx.closePath();
-          ctx.fill();
-        }
-
-        function drawIsoBuilding(ctx, baseX, baseY, floors, size, color) {
-          for (let i = 0; i < floors; i++) {
-            drawIsoCube(ctx, baseX, baseY - i * size / 2, size, size, color);
-          }
-        }
-
-        function placeIsoBuilding(col, row, floors, color) {
-          var isoX = (col - row) * TILE_L / 2 + offsetX;
-          var isoY = (col + row) * TILE_L / 4 + offsetY;
-          drawIsoBuilding(ctx, isoX, isoY + TILE_L / 2, floors, TILE_L, color || '#598BAF');
-        }
-
-        // store file data received from the extension
+        let zoomLevel = 1;
         let fileData = [];
 
         function render() {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-          drawIsoGrid(ctx, 10, 10, TILE_L, offsetX, offsetY);
 
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.scale(zoomLevel, zoomLevel);
+          ctx.translate(-canvas.width / 2, -canvas.height / 2);
+
+          drawIsoGrid(ctx, 10, 10, TILE_L, offsetX, offsetY);
           if (fileData.length === 0) {
-            placeIsoBuilding(3, 3, 3, '#598BAF');
-            placeIsoBuilding(5, 5, 5, '#8B5CF6');
-            placeIsoBuilding(7, 3, 2, '#10B981');
+            placeIsoBuilding(ctx, 3, 3, 3, '#598BAF', TILE_L, offsetX, offsetY);
+            placeIsoBuilding(ctx, 5, 5, 5, '#8B5CF6', TILE_L, offsetX, offsetY);
+            placeIsoBuilding(ctx, 7, 3, 2, '#10B981', TILE_L, offsetX, offsetY);
           } else {
             // FULL_STATE: file has path + classes[]; height from class count and method count
             fileData.forEach((file, i) => {
@@ -309,9 +259,16 @@ function getWebviewContent() {
               const floors = Math.max(1, classCount + methodCount);
               const col = 3 + i * 2;
               const row = 3 + i;
-              placeIsoBuilding(col, row, floors, '#598BAF');
+              placeIsoBuilding(ctx, col, row, floors, '#598BAF', TILE_L, offsetX, offsetY);
             });
           }
+          drawUmlBox(ctx, 50, 50, {
+            name: 'App',
+            fields: ['count: int', 'name: String'],
+            methods: ['getName()', 'setName()', 'toString()', 'run()']
+          });
+
+          ctx.restore();
         }
 
         // Listen for FULL_STATE (and legacy AST_DATA) from the extension
@@ -329,12 +286,28 @@ function getWebviewContent() {
           } else if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
             fileData = msg.payload.files;
             render();
+          } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
+            const { changed, related, removed } = msg.payload;
+            console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
+            console.log('[PARTIAL_STATE] related:', related.map(c => c.Classname));
+            console.log('[PARTIAL_STATE] removed:', removed);
+            // TODO: update individual buildings instead of full re-render
           }
         });
 
         window.addEventListener('resize', () => {
           canvas.width = window.innerWidth;
           canvas.height = window.innerHeight;
+          render();
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          if (e.deltaY < 0) {
+            zoomLevel = Math.min(zoomLevel * 1.1, 3);
+          } else {
+            zoomLevel = Math.max(zoomLevel * 0.9, 0.3);
+          }
           render();
         });
 
@@ -349,5 +322,6 @@ function getWebviewContent() {
 }
 
 
+
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }
