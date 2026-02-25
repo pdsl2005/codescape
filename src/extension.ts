@@ -2,10 +2,30 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { FileParseStore } from './state';
-import { parseAndStore } from './parser';
-import { minimatch } from 'minimatch';
+import { parseAndStore, ensureInitialized } from './parser';
 import { ClassInfo } from './parser/javaExtractor';
+import { buildGraph, getRelated } from './relations';
+import { minimatch } from 'minimatch';
+
 import { JavaFileWatcher } from './JavaFileWatcher';
+// Builds the PARTIAL_STATE payload from changed classes, removed class names,
+// and the current store. Related classes are found via the relationship graph.
+function buildPartialStatePayload(
+  changedClasses: ClassInfo[],
+  removedNames: string[],
+  store: FileParseStore
+): { changed: ClassInfo[]; related: ClassInfo[]; removed: string[] } {
+  const allClasses = store.snapshot().flatMap(e => e.entry.data ?? []);
+  const graph = buildGraph(allClasses);
+  const changedNames = changedClasses.map(c => c.Classname);
+  const relatedNames = getRelated([...changedNames, ...removedNames], graph);
+  const relatedClasses = allClasses.filter(c => relatedNames.includes(c.Classname));
+  return { changed: changedClasses, related: relatedClasses, removed: removedNames };
+}
+
+
+
+
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -142,10 +162,6 @@ async function workspaceScan(store: FileParseStore) {
   );
 }
 
-async function workspaceScan(): Promise<vscode.Uri[]> {
-  return await getJavaFiles();
-}
-
 /**
  * Gets all java files within the workspace excluding the ones mentioned in .exclude. 
  * Note: Files in .exclude must be in glob pattern.
@@ -260,11 +276,18 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
           ctx.restore();
         }
 
+        // Listen for messages from the extension
         window.addEventListener('message', event => {
           const msg = event.data;
           if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
             fileData = msg.payload.files;
             render();
+          } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
+            const { changed, related, removed } = msg.payload;
+            console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
+            console.log('[PARTIAL_STATE] related:', related.map(c => c.Classname));
+            console.log('[PARTIAL_STATE] removed:', removed);
+            // TODO: update individual buildings instead of full re-render
           }
         });
 
