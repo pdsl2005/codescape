@@ -14,23 +14,21 @@ const stubClass: ClassInfo = {
   Constructors: [],
 };
 
+
+
 suite('Watcher and Store', () => {
-  test('FileParseStore lifecycle', async () => {
-    const store = new FileParseStore();
-    const uri = vscode.Uri.file('/tmp/Test.java');
-
-    store.markPending(uri);
-    const pending = store.get(uri);
-    assert.ok(pending, 'entry should exist after markPending');
-    assert.strictEqual(pending.status, 'pending');
-
-    store.setParsed(uri, [stubClass]);
-    const parsed = store.get(uri);
-    assert.ok(parsed, 'entry should exist after setParsed');
-    assert.strictEqual(parsed.status, 'parsed');
-    assert.deepStrictEqual(parsed.data, [stubClass]);
-
-    store.remove(uri);
-    assert.strictEqual(store.get(uri), undefined);
-  });
+	test('FileParseStore lifecycle', async () => {
+		const store = new FileParseStore();
+		const uri = vscode.Uri.file('/tmp/Test.java');
+		store.markPending(uri);
+		let e = store.get(uri);
+		assert.strictEqual(e.status, 'pending');
+		store.setParsed(uri, { foo: 'bar' });
+		e = store.get(uri);
+		assert.strictEqual(e.status, 'parsed');
+		assert.deepStrictEqual(e.data, { foo: 'bar' });
+		store.remove(uri);
+		e = store.get(uri);
+		assert.strictEqual(e, undefined);
+	});
 });

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { initParser, extractClasses, ClassInfo } from './parser/javaExtractor';
 import { FileParseStore } from './state';
+import * as path from 'path';
 
 let initialized = false;
 
@@ -9,7 +10,13 @@ export async function ensureInitialized(): Promise<void> {
   if (!initialized) {
     await initParser();
     initialized = true;
+    console.log('AST parser initialized successfully');
   }
+}
+
+/** Alias for ensureInitialized — kept for compatibility. */
+export async function initializeParser(): Promise<void> {
+  return ensureInitialized();
 }
 
 /** Reads a Java file from the workspace and extracts its classes via TreeSitter. */
@@ -21,9 +28,30 @@ export async function parseJavaFile(uri: vscode.Uri): Promise<ClassInfo[]> {
 }
 
 /**
- * Orchestrator: mark pending, parse, store, and return results.
- * Also returns class names that were in the store before this parse but are no longer
- * present — these are classes that were removed/renamed in the file.
+ * Export parsed ClassInfo data to a JSON file next to the source file.
+ * For example: Test.java → Test.json
+ */
+async function exportParseResultsAsJson(uri: vscode.Uri, classInfo: ClassInfo[]): Promise<void> {
+  try {
+    const javaFilePath = uri.fsPath;
+    const jsonFilePath = javaFilePath.replace(/\.java$/, '.json');
+    const jsonUri = vscode.Uri.file(jsonFilePath);
+    const jsonContent = JSON.stringify({
+      sourceFile: path.basename(javaFilePath),
+      parsedAt: new Date().toISOString(),
+      classes: classInfo
+    }, null, 2);
+    const encoder = new TextEncoder();
+    await vscode.workspace.fs.writeFile(jsonUri, encoder.encode(jsonContent));
+    console.log(`Exported parse results to ${jsonFilePath}`);
+  } catch (err) {
+    console.error('Failed to export parse results as JSON:', err);
+  }
+}
+
+/**
+ * Orchestrator: mark pending, parse, store, export JSON, and return results.
+ * Returns { changed, removed } for partial state diffing.
  */
 export async function parseAndStore(
   uri: vscode.Uri,
@@ -36,8 +64,8 @@ export async function parseAndStore(
   try {
     const classes = await parseJavaFile(uri);
     store.setParsed(uri, classes);
+    await exportParseResultsAsJson(uri, classes);
 
-    // Class names present before but absent now were removed/renamed
     const removedNames = oldClasses
       .map(c => c.Classname)
       .filter(name => !classes.some(c => c.Classname === name));
@@ -48,4 +76,9 @@ export async function parseAndStore(
     console.error('Parsing failed for', uri.fsPath, err);
     return { changed: [], removed: [] };
   }
+}
+
+/** Getter for parsed data from URI. */
+export function getData(uri: vscode.Uri, store: FileParseStore) {
+  return store.get(uri);
 }
