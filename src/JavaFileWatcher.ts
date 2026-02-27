@@ -17,13 +17,6 @@ export class JavaFileWatcher {
     constructor(store: FileParseStore) {
         this._watcher = vscode.workspace.createFileSystemWatcher('**/*.java');
 
-
-
-        this._watcher.onDidCreate(async (uri: vscode.Uri) => {
-            console.log('Java file created:', uri.fsPath);
-            this.handleIncrementalChange(uri, store);
-        });
-
         this._watcher.onDidChange(async (uri: vscode.Uri) => {
             console.log('Java file changed:', uri.fsPath);
             this.handleIncrementalChange(uri, store);
@@ -41,7 +34,6 @@ export class JavaFileWatcher {
             this.postIncrementalChange({removed: removedNames}, this._webviews);
         });
     }
-
     private buildPartialStatePayload(
       changedClasses: ClassInfo[],
       removedNames: string[],
