@@ -268,12 +268,25 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         const offsetY = 100;
         let zoomLevel = 1;
 
+        const COLOR_PALETTE = [
+  "#598BAF",
+  "#8B5CF6",
+  "#10B981",
+  "#F59E0B",
+  "#EF4444",
+  "#14B8A6",
+  "#6366F1",
+  "#EC4899"
+];
+
         //this replaces fileData, single source of truth for frontend
         let state = {
         // ClassInfo[]
         classes: [],   
         // { className: { col, row } }  
         layout: {},   
+        //stores colors
+        colors: {}, 
         // loading | ready | empty | error
         status: "loading" 
         };
@@ -299,6 +312,9 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         // run layout before rendering
         runAutoLayout();
 
+        //assign the colors before re-rendering
+        assignColors();
+
         // re-render canvas
         render();
         }
@@ -320,7 +336,36 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
             row
             };
         });
-        }
+    }
+
+        function assignColors() {
+        const newColorMap = {};
+        const usedColors = new Set();
+
+        //preserve existing colors
+        state.classes.forEach(cls => {
+          const existing = state.colors[cls.Classname];
+          if (existing) {
+            newColorMap[cls.Classname] = existing;
+            usedColors.add(existing);
+          }
+        });
+
+        //assign new colors
+        state.classes.forEach(cls => {
+        if (!newColorMap[cls.Classname]) {
+            const nextColor =
+              COLOR_PALETTE.find(c => !usedColors.has(c)) ||
+              COLOR_PALETTE[Object.keys(newColorMap).length % COLOR_PALETTE.length];
+
+            newColorMap[cls.Classname] = nextColor;
+            usedColors.add(nextColor);
+          }
+        });
+
+        state.colors = newColorMap;
+      }
+    
 
 
         //now only reads from state
@@ -396,7 +441,7 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         position.col,
         position.row,
         floors,
-        "#598BAF",
+        state.colors[cls.Classname] || "#598BAF",
         TILE_L,
         offsetX,
         offsetY
