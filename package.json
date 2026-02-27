@@ -14,8 +14,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "codescape.helloWorld",
-        "title": "Codescape: Hello World"
+        "command": "codescape.createPanel",
+        "title": "Create Panel"
       },
       {
         "command": "codescape.scan",

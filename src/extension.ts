@@ -5,7 +5,6 @@ import { FileParseStore } from './state';
 import { parseAndStore, ensureInitialized } from './parser';
 import { minimatch } from 'minimatch';
 import * as path from 'path';
-
 import { JavaFileWatcher } from './JavaFileWatcher';
 
 
@@ -16,58 +15,19 @@ import { JavaFileWatcher } from './JavaFileWatcher';
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
   console.log("CODESCAPE ACTIVATED");
-
+  const store = new FileParseStore();
+  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store));
+  const javaWatcher = new JavaFileWatcher(store);
   // Use the console to output diagnostic information (console.log) and errors (console.error)
   // This line of code will only be executed once when your extension is activated
   //console.log('Congratulations, your extension "codescape" is now active!');
-  
-  const panel = vscode.window.createWebviewPanel(
-    // internal ID
-    'codescapeWebview',
-    // title shown to user  
-    'Codescape',
-    vscode.ViewColumn.One,
-    {
-      // lets the webview run JavaScript
-      enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'src', 'webview')]
-    }
-  );
 
-  // html content for the web viewer
-  panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
-
-  //listen for messages FROM the webview
-  panel.webview.onDidReceiveMessage(message => {
-    console.log('Received from webview:', message);
-  });
-
-  //send mock data TO the webview
-  panel.webview.postMessage({
-    type: 'AST_DATA',
-    payload: {
-      files: [
-        {
-          name: 'App.tsx',
-          lines: 120,
-          functions: 4,
-          classes: 2
-        }
-      ]
-    }
-  });
-
-  const store = new FileParseStore();
-  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store));
-
-
-  const javaWatcher = new JavaFileWatcher(store);
-  javaWatcher.addWebview(panel.webview);
   // sidebar view
   const provider = new CodescapeViewProvider(context.extensionUri, javaWatcher);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('codescape.Cityview', provider)
   );
+  const create = vscode.commands.registerCommand('codescape.createPanel', () => createPanel(context, javaWatcher));
 
   const dumpDisposable = vscode.commands.registerCommand('codescape.dumpParseStore', () => {
     const snap = store.snapshot();
@@ -113,9 +73,50 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(dumpDisposable);
   context.subscriptions.push(exportDisposable);
   context.subscriptions.push(javaWatcher);
+  context.subscriptions.push(create);
   context.subscriptions.push(scan);
+  
 }
 
+function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWatcher){
+    
+  const panel = vscode.window.createWebviewPanel(
+    // internal ID
+    'codescapeWebview',
+    // title shown to user  
+    'Codescape',
+    vscode.ViewColumn.One,
+    {
+      // lets the webview run JavaScript
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'src', 'webview')]
+    }
+  );
+
+  // html content for the web viewer
+  panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
+  //listen for messages FROM the webview
+  panel.webview.onDidReceiveMessage(message => {
+    console.log('Received from webview:', message);
+    javaWatcher.addWebview(panel.webview);
+  });
+  
+  //send mock data TO the webview (Change this to run a full state change)
+  panel.webview.postMessage({
+    type: 'AST_DATA',
+    payload: {
+      files: [
+        {
+          name: 'App.tsx',
+          lines: 120,
+          functions: 4,
+          classes: 2
+        }
+      ]
+    }
+  });
+  panel.onDidDispose( () =>{javaWatcher.removeWebview(panel.webview)});
+}
 async function workspaceScan(store: FileParseStore) {
   //Get all java files not in exclude
   const files = await getJavaFiles();
@@ -270,6 +271,7 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
 
         // Listen for FULL_STATE (and legacy AST_DATA) from the extension
         window.addEventListener('message', event => {
+          console.log('Message received:', event.data);
           const msg = event.data;
           if (msg.type === 'FULL_STATE' && msg.payload) {
             fileData = msg.payload.files || [];

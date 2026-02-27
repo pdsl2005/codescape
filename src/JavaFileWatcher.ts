@@ -57,7 +57,9 @@ export class JavaFileWatcher {
     
     //TODO: UPDATE THIS TO webviewview
     addWebview(view: vscode.Webview){
-        this._webviews.push(view);
+        if(!this._webviews.includes(view)){
+            this._webviews.push(view);
+        }
     }
 
     removeWebview(view: vscode.Webview){
@@ -79,13 +81,17 @@ export class JavaFileWatcher {
         }
     }
     //TODO (change the type of updatedData based on parser integration)
-    private postIncrementalChange(payload : IncrementalChangePayload, views : vscode.Webview[]){
-        console.log("Posted incremental change");
-        views.forEach( v => v.postMessage({
-            type: "IncrementalChange",
-            payload: payload
-        }));
+    private async postIncrementalChange(payload : IncrementalChangePayload, views : vscode.Webview[]){
+        for (const v of views) {
+            v.postMessage({
+                type: "PARTIAL_STATE",
+                payload: payload
+            }).then(delivered => {
+                console.log("delivered:", delivered);
+            });
+        }
     }
+    
     dispose(){
         this._watcher.dispose();
     }
