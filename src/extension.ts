@@ -3,11 +3,32 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { FileParseStore } from "./state";
-import { parseAndStore } from "./parser";
-import { minimatch } from "minimatch";
-import { ClassInfo } from "./parser/javaExtractor";
 import { JavaFileWatcher } from "./JavaFileWatcher";
 import { initializeParser } from "./parser";
+import { parseAndStore, ensureInitialized } from './parser';
+import { ClassInfo } from './parser/javaExtractor';
+import { buildGraph, getRelated } from './relations';
+import { minimatch } from 'minimatch';
+
+import { JavaFileWatcher } from './JavaFileWatcher';
+// Builds the PARTIAL_STATE payload from changed classes, removed class names,
+// and the current store. Related classes are found via the relationship graph.
+function buildPartialStatePayload(
+  changedClasses: ClassInfo[],
+  removedNames: string[],
+  store: FileParseStore
+): { changed: ClassInfo[]; related: ClassInfo[]; removed: string[] } {
+  const allClasses = store.snapshot().flatMap(e => e.entry.data ?? []);
+  const graph = buildGraph(allClasses);
+  const changedNames = changedClasses.map(c => c.Classname);
+  const relatedNames = getRelated([...changedNames, ...removedNames], graph);
+  const relatedClasses = allClasses.filter(c => relatedNames.includes(c.Classname));
+  return { changed: changedClasses, related: relatedClasses, removed: removedNames };
+}
+
+
+
+
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -72,9 +93,8 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  const scan = vscode.commands.registerCommand("codescape.scan", () =>
-    workspaceScan(),
-  );
+  const store = new FileParseStore();
+  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store));
 
   const javaWatcher = new JavaFileWatcher(store);
   javaWatcher.setPanel(panel);
@@ -342,6 +362,26 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
           ctx.translate(-canvas.width / 2, -canvas.height / 2);
 
           drawIsoGrid(ctx, 10, 10, TILE_L, offsetX, offsetY);
+          if (fileData.length === 0) {
+            placeIsoBuilding(ctx, 3, 3, 3, '#598BAF', TILE_L, offsetX, offsetY);
+            placeIsoBuilding(ctx, 5, 5, 5, '#8B5CF6', TILE_L, offsetX, offsetY);
+            placeIsoBuilding(ctx, 7, 3, 2, '#10B981', TILE_L, offsetX, offsetY);
+          } else {
+            // FULL_STATE: file has path + classes[]; height from class count and method count
+            fileData.forEach((file, i) => {
+              const classCount = file.classes ? file.classes.length : 0;
+              const methodCount = file.classes ? file.classes.reduce(function (n, c) { return n + (c.Methods ? c.Methods.length : 0); }, 0) : 0;
+              const floors = Math.max(1, classCount + methodCount);
+              const col = 3 + i * 2;
+              const row = 3 + i;
+              placeIsoBuilding(ctx, col, row, floors, '#598BAF', TILE_L, offsetX, offsetY);
+            });
+          }
+          drawUmlBox(ctx, 50, 50, {
+            name: 'App',
+            fields: ['count: int', 'name: String'],
+            methods: ['getName()', 'setName()', 'toString()', 'run()']
+          });
 
         //loading state
         if (state.status === "loading") {
@@ -421,6 +461,27 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
           const classArray = msg.data?.data || [];
 
           updateState(classArray);
+        // Listen for FULL_STATE (and legacy AST_DATA) from the extension
+        window.addEventListener('message', event => {
+          const msg = event.data;
+          if (msg.type === 'FULL_STATE' && msg.payload) {
+            fileData = msg.payload.files || [];
+            if (msg.payload.status === 'empty') {
+              // Frontend can show empty state; for now still call render()
+            }
+            if (msg.payload.errors && msg.payload.errors.length > 0) {
+              console.warn('Parse errors:', msg.payload.errors);
+            }
+            render();
+          } else if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
+            fileData = msg.payload.files;
+            render();
+          } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
+            const { changed, related, removed } = msg.payload;
+            console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
+            console.log('[PARTIAL_STATE] related:', related.map(c => c.Classname));
+            console.log('[PARTIAL_STATE] removed:', removed);
+            // TODO: update individual buildings instead of full re-render
           }
         });
 
@@ -443,10 +504,8 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         //initial render
         render();
 
-        vscode.postMessage({
-          type: 'WEBVIEW_READY',
-          payload: { status: 'ready' }
-        });
+        // Handshake: tell extension we are ready so it sends FULL_STATE (avoids dropped messages)
+        vscode.postMessage({ type: 'READY' });
       </script>
     </body>
     </html>

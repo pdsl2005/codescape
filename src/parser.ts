@@ -1,39 +1,30 @@
 import * as vscode from 'vscode';
-import { FileParseStore } from './state';
 import { initParser, extractClasses, ClassInfo } from './parser/javaExtractor';
+import { FileParseStore } from './state';
 import * as path from 'path';
 
-let parserInitialized = false;
+let initialized = false;
 
-/**
- * Initialize the AST parser once during extension startup.
- */
-export async function initializeParser(): Promise<void> {
-	if (parserInitialized) {
-		return;
-	}
-	try {
-		await initParser();
-		parserInitialized = true;
-		console.log('AST parser initialized successfully');
-	} catch (err) {
-		console.error('Failed to initialize AST parser:', err);
-		throw err;
-	}
+/** Initializes the TreeSitter Java parser once. Safe to call multiple times. */
+export async function ensureInitialized(): Promise<void> {
+  if (!initialized) {
+    await initParser();
+    initialized = true;
+    console.log('AST parser initialized successfully');
+  }
 }
 
-/**
- * Read file from workspace and parse it using the real AST parser.
- * Returns ClassInfo[] containing extracted class/interface information.
- */
-export async function parseJavaFile(uri: vscode.Uri): Promise<ClassInfo[]> {
-	if (!parserInitialized) {
-		throw new Error('Parser not initialized. Call initializeParser() first.');
-	}
+/** Alias for ensureInitialized — kept for compatibility. */
+export async function initializeParser(): Promise<void> {
+  return ensureInitialized();
+}
 
-	const bytes = await vscode.workspace.fs.readFile(uri);
-	const text = new TextDecoder().decode(bytes);
-	return extractClasses(text);
+/** Reads a Java file from the workspace and extracts its classes via TreeSitter. */
+export async function parseJavaFile(uri: vscode.Uri): Promise<ClassInfo[]> {
+  await ensureInitialized();
+  const bytes = await vscode.workspace.fs.readFile(uri);
+  const text = new TextDecoder().decode(bytes);
+  return extractClasses(text);
 }
 
 /**
@@ -41,46 +32,53 @@ export async function parseJavaFile(uri: vscode.Uri): Promise<ClassInfo[]> {
  * For example: Test.java → Test.json
  */
 async function exportParseResultsAsJson(uri: vscode.Uri, classInfo: ClassInfo[]): Promise<void> {
-	try {
-		// Create JSON filename: Test.java → Test.json
-		const javaFilePath = uri.fsPath;
-		const jsonFilePath = javaFilePath.replace(/\.java$/, '.json');
-		const jsonUri = vscode.Uri.file(jsonFilePath);
-
-		// Create nicely formatted JSON
-		const jsonContent = JSON.stringify({
-			sourceFile: path.basename(javaFilePath),
-			parsedAt: new Date().toISOString(),
-			classes: classInfo
-		}, null, 2);
-
-		// Write JSON file
-		const encoder = new TextEncoder();
-		await vscode.workspace.fs.writeFile(jsonUri, encoder.encode(jsonContent));
-		console.log(`Exported parse results to ${jsonFilePath}`);
-	} catch (err) {
-		console.error('Failed to export parse results as JSON:', err);
-	}
+  try {
+    const javaFilePath = uri.fsPath;
+    const jsonFilePath = javaFilePath.replace(/\.java$/, '.json');
+    const jsonUri = vscode.Uri.file(jsonFilePath);
+    const jsonContent = JSON.stringify({
+      sourceFile: path.basename(javaFilePath),
+      parsedAt: new Date().toISOString(),
+      classes: classInfo
+    }, null, 2);
+    const encoder = new TextEncoder();
+    await vscode.workspace.fs.writeFile(jsonUri, encoder.encode(jsonContent));
+    console.log(`Exported parse results to ${jsonFilePath}`);
+  } catch (err) {
+    console.error('Failed to export parse results as JSON:', err);
+  }
 }
 
 /**
- * Orchestrator: mark pending, parse, store results, and export JSON. Errors are logged.
+ * Orchestrator: mark pending, parse, store, export JSON, and return results.
+ * Returns { changed, removed } for partial state diffing.
  */
-export async function parseAndStore(uri: vscode.Uri, store: FileParseStore) {
-	store.markPending(uri);
-	try {
-		const parsed = await parseJavaFile(uri);
-		store.setParsed(uri, parsed);
-		// Also export to JSON file
-		await exportParseResultsAsJson(uri, parsed);
-		console.log('Parsed and stored for', uri.fsPath, `(found ${parsed.length} classes/interfaces)`);
-	} catch (err) {
-		console.error('Parsing failed for', uri.fsPath, err);
-	}
+export async function parseAndStore(
+  uri: vscode.Uri,
+  store: FileParseStore
+): Promise<{ changed: ClassInfo[]; removed: string[] }> {
+  const before = store.get(uri);
+  const oldClasses: ClassInfo[] = before?.data ?? [];
+
+  store.markPending(uri);
+  try {
+    const classes = await parseJavaFile(uri);
+    store.setParsed(uri, classes);
+    await exportParseResultsAsJson(uri, classes);
+
+    const removedNames = oldClasses
+      .map(c => c.Classname)
+      .filter(name => !classes.some(c => c.Classname === name));
+
+    console.log(`Parsed ${uri.fsPath}: ${classes.length} class(es), ${removedNames.length} removed`);
+    return { changed: classes, removed: removedNames };
+  } catch (err) {
+    console.error('Parsing failed for', uri.fsPath, err);
+    return { changed: [], removed: [] };
+  }
 }
-/**
- * getter for parsed data from uri
- */
-export function getData(uri: vscode.Uri, store: FileParseStore){
-	return store.get(uri);
+
+/** Getter for parsed data from URI. */
+export function getData(uri: vscode.Uri, store: FileParseStore) {
+  return store.get(uri);
 }
