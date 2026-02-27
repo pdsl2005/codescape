@@ -26,9 +26,7 @@ export class JavaFileWatcher {
 
         this._watcher.onDidChange(async (uri: vscode.Uri) => {
             console.log('Java file changed:', uri.fsPath);
-            if (!await isExcluded(uri)) {
-                this.handleIncrementalChange(uri, store);
-            }
+            this.handleIncrementalChange(uri, store);
         });
 
         this._watcher.onDidDelete((uri: vscode.Uri) => {
