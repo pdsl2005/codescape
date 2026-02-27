@@ -3,25 +3,10 @@
 import * as vscode from 'vscode';
 import { FileParseStore } from './state';
 import { parseAndStore, ensureInitialized } from './parser';
-import { ClassInfo } from './parser/javaExtractor';
-import { buildGraph, getRelated } from './relations';
 import { minimatch } from 'minimatch';
+import path from 'path';
 
 import { JavaFileWatcher } from './JavaFileWatcher';
-// Builds the PARTIAL_STATE payload from changed classes, removed class names,
-// and the current store. Related classes are found via the relationship graph.
-function buildPartialStatePayload(
-  changedClasses: ClassInfo[],
-  removedNames: string[],
-  store: FileParseStore
-): { changed: ClassInfo[]; related: ClassInfo[]; removed: string[] } {
-  const allClasses = store.snapshot().flatMap(e => e.entry.data ?? []);
-  const graph = buildGraph(allClasses);
-  const changedNames = changedClasses.map(c => c.Classname);
-  const relatedNames = getRelated([...changedNames, ...removedNames], graph);
-  const relatedClasses = allClasses.filter(c => relatedNames.includes(c.Classname));
-  return { changed: changedClasses, related: relatedClasses, removed: removedNames };
-}
 
 
 
@@ -71,13 +56,17 @@ export function activate(context: vscode.ExtensionContext) {
       ]
     }
   });
-
-  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan());
-
   const store = new FileParseStore();
+  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store));
+
 
   const javaWatcher = new JavaFileWatcher(store);
-  javaWatcher.setPanel(panel);
+  javaWatcher.addWebview(panel.webview);
+  // sidebar view
+  const provider = new CodescapeViewProvider(context.extensionUri, javaWatcher);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('codescape.Cityview', provider)
+  );
 
   const dumpDisposable = vscode.commands.registerCommand('codescape.dumpParseStore', () => {
     const snap = store.snapshot();
@@ -122,7 +111,6 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(dumpDisposable);
   context.subscriptions.push(exportDisposable);
-
   context.subscriptions.push(javaWatcher);
   context.subscriptions.push(scan);
 }
@@ -151,15 +139,10 @@ async function workspaceScan(store: FileParseStore) {
   const snap = store.snapshot();
   console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
   vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
-  context.subscriptions.push(dumpDisposable);
-  context.subscriptions.push(javaWatcher);
-  context.subscriptions.push(scan);
 
-  // sidebar view
-  const provider = new CodescapeViewProvider(context.extensionUri);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('codescape.Cityview', provider)
-  );
+
+
+
 }
 
 /**
@@ -200,13 +183,17 @@ export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
 
 // sidebar view
 class CodescapeViewProvider implements vscode.WebviewViewProvider {
-    constructor(private extensionUri: vscode.Uri) {}
+    //add filewatcher to sidebar
+    constructor(private extensionUri: vscode.Uri, private javaWatcher: JavaFileWatcher) {}
     resolveWebviewView(webviewView: vscode.WebviewView) {
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
         };
         webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
+        this.javaWatcher.addWebview(webviewView.webview);
+        //ensure proper disposing
+        webviewView.onDidDispose( () => this.javaWatcher.removeWebview(webviewView.webview));
     }
 }
 
