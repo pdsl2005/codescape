@@ -22,11 +22,21 @@ suite('Watcher and Store', () => {
 		const uri = vscode.Uri.file('/tmp/Test.java');
 		store.markPending(uri);
 		let e = store.get(uri);
-		assert.strictEqual(e.status, 'pending');
-		store.setParsed(uri, { foo: 'bar' });
+		assert.strictEqual(e!.status, 'pending');
+		let info: ClassInfo[] = [{
+		  Classname: 'bar',
+		  Methods: [],
+		  Loc: 0,
+		  Type: 'public',
+		  Extends: null,
+		  Implements: [],
+		  Fields: [],
+		  Constructors: []
+		}];
+		store.setParsed(uri, info);
 		e = store.get(uri);
-		assert.strictEqual(e.status, 'parsed');
-		assert.deepStrictEqual(e.data, { foo: 'bar' });
+		assert.strictEqual(e!.status, 'parsed');
+		assert.deepStrictEqual(e!.data, { foo: 'bar' });
 		store.remove(uri);
 		e = store.get(uri);
 		assert.strictEqual(e, undefined);

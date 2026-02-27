@@ -6,25 +6,7 @@ import { FileParseStore } from "./state";
 import { JavaFileWatcher } from "./JavaFileWatcher";
 import { initializeParser } from "./parser";
 import { parseAndStore, ensureInitialized } from './parser';
-import { ClassInfo } from './parser/javaExtractor';
-import { buildGraph, getRelated } from './relations';
 import { minimatch } from 'minimatch';
-
-import { JavaFileWatcher } from './JavaFileWatcher';
-// Builds the PARTIAL_STATE payload from changed classes, removed class names,
-// and the current store. Related classes are found via the relationship graph.
-function buildPartialStatePayload(
-  changedClasses: ClassInfo[],
-  removedNames: string[],
-  store: FileParseStore
-): { changed: ClassInfo[]; related: ClassInfo[]; removed: string[] } {
-  const allClasses = store.snapshot().flatMap(e => e.entry.data ?? []);
-  const graph = buildGraph(allClasses);
-  const changedNames = changedClasses.map(c => c.Classname);
-  const relatedNames = getRelated([...changedNames, ...removedNames], graph);
-  const relatedClasses = allClasses.filter(c => relatedNames.includes(c.Classname));
-  return { changed: changedClasses, related: relatedClasses, removed: removedNames };
-}
 
 
 
@@ -34,31 +16,21 @@ function buildPartialStatePayload(
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
   console.log("CODESCAPE ACTIVATED");
+  const store = new FileParseStore();
+  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store));
+  const javaWatcher = new JavaFileWatcher(store);
   await initializeParser();
 
   // Use the console to output diagnostic information (console.log) and errors (console.error)
   // This line of code will only be executed once when your extension is activated
   //console.log('Congratulations, your extension "codescape" is now active!');
 
-  const panel = vscode.window.createWebviewPanel(
-    // internal ID
-    "codescapeWebview",
-    // title shown to user
-    "Codescape",
-    vscode.ViewColumn.One,
-    {
-      // lets the webview run JavaScript
-      enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(context.extensionUri, "src", "webview"),
-      ],
-    },
+  // sidebar view
+  const provider = new CodescapeViewProvider(context.extensionUri, javaWatcher);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('codescape.Cityview', provider)
   );
-
-  // html content for the web viewer
-  panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
-
-  const store = new FileParseStore();
+  const create = vscode.commands.registerCommand('codescape.createPanel', () => createPanel(context, javaWatcher));
   // Parse all existing Java files on startup
   const existingFiles = await getJavaFiles();
 
@@ -66,38 +38,6 @@ export async function activate(context: vscode.ExtensionContext) {
     await parseAndStore(uri, store);
   }
 
-  //listen for messages FROM the webview
-  panel.webview.onDidReceiveMessage(async (message) => {
-    console.log("Received from webview:", message);
-
-    // when webview finishes loading
-    if (message.type === "WEBVIEW_READY") {
-      console.log("WEBVIEW READY RECEIVED");
-
-      // get current parse store snapshot
-      const snapshot = store.snapshot();
-
-      // flatten parsed ClassInfo[] from store
-      const allClasses = snapshot.flatMap((entry) =>
-        entry.entry.status === "parsed" ? entry.entry.data : [],
-      );
-
-      // send current state to webview
-      panel.webview.postMessage({
-        type: "IncrementalChange",
-        data: {
-          status: "parsed",
-          data: allClasses,
-        },
-      });
-    }
-  });
-
-  const store = new FileParseStore();
-  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store));
-
-  const javaWatcher = new JavaFileWatcher(store);
-  javaWatcher.setPanel(panel);
 
   const dumpDisposable = vscode.commands.registerCommand(
     "codescape.dumpParseStore",
@@ -158,49 +98,82 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(dumpDisposable);
   context.subscriptions.push(exportDisposable);
-
   context.subscriptions.push(javaWatcher);
+  context.subscriptions.push(create);
   context.subscriptions.push(scan);
+  
 }
 
-// async function workspaceScan(store: FileParseStore) {
-//   //Get all java files not in exclude
-//   const files = await getJavaFiles();
+function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWatcher){
+    
+  const panel = vscode.window.createWebviewPanel(
+    // internal ID
+    'codescapeWebview',
+    // title shown to user  
+    'Codescape',
+    vscode.ViewColumn.One,
+    {
+      // lets the webview run JavaScript
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'src', 'webview')]
+    }
+  );
 
-//   console.log(`Found ${files.length} Java files. Starting parse...`);
-//   vscode.window.showInformationMessage(`Codescape: Scanning and parsing ${files.length} Java files...`);
+  // html content for the web viewer
+  panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
+  //listen for messages FROM the webview
+  panel.webview.onDidReceiveMessage(message => {
+    console.log('Received from webview:', message);
+    javaWatcher.addWebview(panel.webview);
+  });
+  
+  //send mock data TO the webview (Change this to run a full state change)
+  panel.webview.postMessage({
+    type: 'AST_DATA',
+    payload: {
+      files: [
+        {
+          name: 'App.tsx',
+          lines: 120,
+          functions: 4,
+          classes: 2
+        }
+      ]
+    }
+  });
+  panel.onDidDispose( () =>{javaWatcher.removeWebview(panel.webview)});
+}
 
-//   let successCount = 0;
-//   let failureCount = 0;
+async function workspaceScan(store: FileParseStore) {
+  //Get all java files not in exclude
+  const files = await getJavaFiles();
 
-//   // Parse all files sequentially to avoid overwhelming the parser
-//   for (const uri of files) {
-//     try {
-//       await parseAndStore(uri, store);
-//       successCount++;
-//     } catch (err) {
-//       failureCount++;
-//       console.error(`Failed to parse ${uri.fsPath}:`, err);
-//     }
-//   }
+  console.log(`Found ${files.length} Java files. Starting parse...`);
+  vscode.window.showInformationMessage(`Codescape: Scanning and parsing ${files.length} Java files...`);
 
-//   const snap = store.snapshot();
-//   console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
-//   vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
-//   context.subscriptions.push(dumpDisposable);
-//   context.subscriptions.push(javaWatcher);
-//   context.subscriptions.push(scan);
+  let successCount = 0;
+  let failureCount = 0;
 
-//   // sidebar view
-//   const provider = new CodescapeViewProvider(context.extensionUri);
-//   context.subscriptions.push(
-//     vscode.window.registerWebviewViewProvider('codescape.Cityview', provider)
-//   );
+  // Parse all files sequentially to avoid overwhelming the parser
+  for (const uri of files) {
+    try {
+      await parseAndStore(uri, store);
+      successCount++;
+    } catch (err) {
+      failureCount++;
+      console.error(`Failed to parse ${uri.fsPath}:`, err);
+    }
+  }
+
+  const snap = store.snapshot();
+  console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
+  vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
+  
+}
+
+// async function workspaceScan(): Promise<vscode.Uri[]> {
+//   return await getJavaFiles();
 // }
-
-async function workspaceScan(): Promise<vscode.Uri[]> {
-  return await getJavaFiles();
-}
 
 /**
  * Gets all java files within the workspace excluding the ones mentioned in .exclude.
@@ -246,19 +219,18 @@ export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
 
 // sidebar view
 class CodescapeViewProvider implements vscode.WebviewViewProvider {
-  constructor(private extensionUri: vscode.Uri) {}
-  resolveWebviewView(webviewView: vscode.WebviewView) {
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(this.extensionUri, "src", "webview"),
-      ],
-    };
-    webviewView.webview.html = getWebviewContent(
-      webviewView.webview,
-      this.extensionUri,
-    );
-  }
+    //add filewatcher to sidebar
+    constructor(private extensionUri: vscode.Uri, private javaWatcher: JavaFileWatcher) {}
+    resolveWebviewView(webviewView: vscode.WebviewView) {
+        webviewView.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
+        };
+        webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
+        this.javaWatcher.addWebview(webviewView.webview);
+        //ensure proper disposing
+        webviewView.onDidDispose( () => this.javaWatcher.removeWebview(webviewView.webview));
+    }
 }
 
 // new canvas-based city visualization that renders an isometric grid and buildings from AST data
@@ -321,7 +293,7 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
 
         //state update function that also triggers a re-render
         function updateState(newData) {
-
+        console.log("update state called with data: ", newData);
         // store new parsed class data
         state.classes = newData;
 
@@ -407,26 +379,26 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
           ctx.translate(-canvas.width / 2, -canvas.height / 2);
 
           drawIsoGrid(ctx, 10, 10, TILE_L, offsetX, offsetY);
-          if (fileData.length === 0) {
-            placeIsoBuilding(ctx, 3, 3, 3, '#598BAF', TILE_L, offsetX, offsetY);
-            placeIsoBuilding(ctx, 5, 5, 5, '#8B5CF6', TILE_L, offsetX, offsetY);
-            placeIsoBuilding(ctx, 7, 3, 2, '#10B981', TILE_L, offsetX, offsetY);
-          } else {
-            // FULL_STATE: file has path + classes[]; height from class count and method count
-            fileData.forEach((file, i) => {
-              const classCount = file.classes ? file.classes.length : 0;
-              const methodCount = file.classes ? file.classes.reduce(function (n, c) { return n + (c.Methods ? c.Methods.length : 0); }, 0) : 0;
-              const floors = Math.max(1, classCount + methodCount);
-              const col = 3 + i * 2;
-              const row = 3 + i;
-              placeIsoBuilding(ctx, col, row, floors, '#598BAF', TILE_L, offsetX, offsetY);
-            });
-          }
-          drawUmlBox(ctx, 50, 50, {
-            name: 'App',
-            fields: ['count: int', 'name: String'],
-            methods: ['getName()', 'setName()', 'toString()', 'run()']
-          });
+          // if (fileData.length === 0) {
+          //   placeIsoBuilding(ctx, 3, 3, 3, '#598BAF', TILE_L, offsetX, offsetY);
+          //   placeIsoBuilding(ctx, 5, 5, 5, '#8B5CF6', TILE_L, offsetX, offsetY);
+          //   placeIsoBuilding(ctx, 7, 3, 2, '#10B981', TILE_L, offsetX, offsetY);
+          // } else {
+          //   // FULL_STATE: file has path + classes[]; height from class count and method count
+          //   fileData.forEach((file, i) => {
+          //     const classCount = file.classes ? file.classes.length : 0;
+          //     const methodCount = file.classes ? file.classes.reduce(function (n, c) { return n + (c.Methods ? c.Methods.length : 0); }, 0) : 0;
+          //     const floors = Math.max(1, classCount + methodCount);
+          //     const col = 3 + i * 2;
+          //     const row = 3 + i;
+          //     placeIsoBuilding(ctx, col, row, floors, '#598BAF', TILE_L, offsetX, offsetY);
+          //   });
+          // }
+          // drawUmlBox(ctx, 50, 50, {
+          //   name: 'App',
+          //   fields: ['count: int', 'name: String'],
+          //   methods: ['getName()', 'setName()', 'toString()', 'run()']
+          // });
 
         //loading state
         if (state.status === "loading") {
@@ -498,16 +470,9 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
   }
 
 
-        window.addEventListener('message', event => {
-        const msg = event.data;
-
-        if (msg && msg.type === "IncrementalChange") {
-          //extract actual ClassInfo[] from wrapper object
-          const classArray = msg.data?.data || [];
-
-          updateState(classArray);
         // Listen for FULL_STATE (and legacy AST_DATA) from the extension
         window.addEventListener('message', event => {
+          console.log('Message received:', event.data);
           const msg = event.data;
           if (msg.type === 'FULL_STATE' && msg.payload) {
             fileData = msg.payload.files || [];
@@ -522,11 +487,20 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
             fileData = msg.payload.files;
             render();
           } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
-            const { changed, related, removed } = msg.payload;
+           //create default values because may not exist in payload
+            const { changed = [], related = [], removed = [] } = msg.payload;
             console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
             console.log('[PARTIAL_STATE] related:', related.map(c => c.Classname));
             console.log('[PARTIAL_STATE] removed:', removed);
             // TODO: update individual buildings instead of full re-render
+            if(changed.length){
+              updateState(changed);
+            }
+            if(related.length){
+              updateState(related);
+
+            }
+
           }
         });
 
