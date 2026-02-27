@@ -39,12 +39,12 @@ Placement options in VS Code:
 
 - Building = Java class/interface (`ClassInfo`).
 - Building height = complexity proxy (`methods + fields`, min 1).
-- Building color = stable per-class assignment from palette.
+- Building color = relationship signal (intended UX) and currently implemented as stable per-class palette assignment.
 - Related classes = computed in backend (`relations.ts`) for incremental updates.
 
 Important current behavior:
 - Related classes are computed and sent in `PARTIAL_STATE`.
-- UI currently logs related classes and updates state subsets; dedicated visual highlighting is not finalized.
+- UI currently logs related classes and updates state subsets; dedicated relationship color/highlight encoding is not finalized.
 
 ## 4) Controls
 
@@ -105,7 +105,7 @@ Runtime-registered internal commands (not contributed in `package.json`):
 
 - Empty view:
   - Verify workspace has Java files.
-  - Run `codescape.scan`.
+  - Run `codescape.scan` (re-parses backend store; current implementation may still require reopening/reloading view to reflect a full-state refresh).
 
 - Commands missing:
   - Recompile (`npm run compile`) and relaunch extension host.

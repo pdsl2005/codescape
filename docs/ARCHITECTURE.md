@@ -22,6 +22,8 @@ Java files -> parser/javaExtractor -> parser -> FileParseStore
 
 ## 2) Module and Class Audit
 
+This section covers all current modules under `src/` and `media/`.
+
 ### Extension Layer
 
 #### `src/extension.ts`
@@ -199,12 +201,25 @@ Java files -> parser/javaExtractor -> parser -> FileParseStore
   - Purpose: relationship-grouped row layout algorithm.
   - Status: tested, but not wired into active webview layout path.
 
+#### `src/layout/demo.ts`
+
+- Purpose: local/demo harness for trying `computeLayout()` with sample nodes.
+- Status: developer utility; not imported by runtime extension code.
+
 ### Message Contract Types
 
 #### `src/types/messages.ts`
 
 - Defines `FullStateMessage`, `PartialStateMessage`, `ReadyMessage`, etc.
 - Status: partially out of sync with runtime payload shapes.
+
+### Legacy/Prototype Frontend Modules
+
+#### `media/index.html`, `media/main.js`, `media/renderer.js`
+
+- Purpose: earlier standalone renderer/prototype assets.
+- Status: not used by the active extension webview (`getWebviewContent` + `src/webview/*`).
+- Interaction: none in current runtime path.
 
 ### Tests
 
@@ -241,6 +256,7 @@ Current code state:
 - Watcher emits `PARTIAL_STATE`.
 - Startup panel currently posts legacy `AST_DATA` mock data.
 - Message contract has legacy branches (`FULL_STATE`, `AST_DATA`, `READY`) and needs consolidation.
+- This split remains the correct architecture even though implementation still has legacy paths.
 
 ### Multi-View Architecture
 Rationale:
@@ -262,7 +278,14 @@ Rationale:
 - Fast startup and simple runtime model.
 - JSON outputs provide inspectable parse artifacts without database complexity.
 
-## 4) How Everything Fits Together
+## 4) Current Gaps and Behavioral Notes
+
+- `codescape.scan` reparses store data but does not currently broadcast a full-state refresh to already-open webviews.
+- `PARTIAL_STATE` frontend handling currently applies subset updates (`changed`, then `related`) instead of merging against a canonical full state model.
+- Relationship data is computed backend-side, but frontend color mapping is still class-stable palette assignment (not relationship-based encoding yet).
+- `src/types/messages.ts` should be aligned with live runtime payloads.
+
+## 5) How Everything Fits Together
 
 - Parsing and dependency graphing live in backend TypeScript modules.
 - Watcher transforms file events into semantic incremental payloads.
