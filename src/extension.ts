@@ -4,21 +4,19 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { FileParseStore } from "./state";
 import { JavaFileWatcher } from "./JavaFileWatcher";
+import { WebviewManager } from "./WebviewManager";
 import { initializeParser } from "./parser";
 import { parseAndStore, ensureInitialized } from './parser';
 import { minimatch } from 'minimatch';
-
-
-
-
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
   console.log("CODESCAPE ACTIVATED");
   const store = new FileParseStore();
-  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store));
-  const javaWatcher = new JavaFileWatcher(store);
+  const webviewManager = new WebviewManager(context.extensionUri);
+  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store, webviewManager));
+  const javaWatcher = new JavaFileWatcher(store, webviewManager);
   await initializeParser();
 
   // Use the console to output diagnostic information (console.log) and errors (console.error)
@@ -26,11 +24,27 @@ export async function activate(context: vscode.ExtensionContext) {
   //console.log('Congratulations, your extension "codescape" is now active!');
 
   // sidebar view
-  const provider = new CodescapeViewProvider(context.extensionUri, javaWatcher);
+  const provider = new CodescapeViewProvider(context.extensionUri, webviewManager);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('codescape.Cityview', provider)
   );
-  const create = vscode.commands.registerCommand('codescape.createPanel', () => createPanel(context, javaWatcher));
+
+  // Register multi-view commands
+  const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
+    const panel = webviewManager.createWebview('side');
+    console.log('Created side panel webview');
+  });
+
+  const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
+    const panel = webviewManager.createWebview('bottom');
+    console.log('Created bottom panel webview');
+  });
+
+  // Legacy create panel command (just create side panel)
+  const create = vscode.commands.registerCommand('codescape.createPanel', () => {
+    webviewManager.createWebview('side');
+  });
+
   // Parse all existing Java files on startup
   const existingFiles = await getJavaFiles();
 
@@ -38,6 +52,12 @@ export async function activate(context: vscode.ExtensionContext) {
     await parseAndStore(uri, store);
   }
 
+  // Send full state to webview manager after initial parse
+  const fullState = {
+    classes: store.snapshot().flatMap(e => e.entry.data ?? []),
+    status: 'ready'
+  };
+  webviewManager.broadcastFullState(fullState);
 
   const dumpDisposable = vscode.commands.registerCommand(
     "codescape.dumpParseStore",
@@ -100,51 +120,12 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(exportDisposable);
   context.subscriptions.push(javaWatcher);
   context.subscriptions.push(create);
+  context.subscriptions.push(createSidePanel);
+  context.subscriptions.push(createBottomPanel);
   context.subscriptions.push(scan);
-  
 }
 
-function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWatcher){
-    
-  const panel = vscode.window.createWebviewPanel(
-    // internal ID
-    'codescapeWebview',
-    // title shown to user  
-    'Codescape',
-    vscode.ViewColumn.One,
-    {
-      // lets the webview run JavaScript
-      enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'src', 'webview')]
-    }
-  );
-
-  // html content for the web viewer
-  panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
-  //listen for messages FROM the webview
-  panel.webview.onDidReceiveMessage(message => {
-    console.log('Received from webview:', message);
-    javaWatcher.addWebview(panel.webview);
-  });
-  
-  //send mock data TO the webview (Change this to run a full state change)
-  panel.webview.postMessage({
-    type: 'AST_DATA',
-    payload: {
-      files: [
-        {
-          name: 'App.tsx',
-          lines: 120,
-          functions: 4,
-          classes: 2
-        }
-      ]
-    }
-  });
-  panel.onDidDispose( () =>{javaWatcher.removeWebview(panel.webview)});
-}
-
-async function workspaceScan(store: FileParseStore) {
+async function workspaceScan(store: FileParseStore, webviewManager: WebviewManager) {
   //Get all java files not in exclude
   const files = await getJavaFiles();
 
@@ -168,7 +149,13 @@ async function workspaceScan(store: FileParseStore) {
   const snap = store.snapshot();
   console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
   vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
-  
+
+  // Broadcast updated full state to all webviews
+  const fullState = {
+    classes: snap.flatMap(e => e.entry.data ?? []),
+    status: successCount > 0 ? 'ready' : 'empty'
+  };
+  webviewManager.broadcastFullState(fullState);
 }
 
 // async function workspaceScan(): Promise<vscode.Uri[]> {
@@ -219,18 +206,16 @@ export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
 
 // sidebar view
 class CodescapeViewProvider implements vscode.WebviewViewProvider {
-    //add filewatcher to sidebar
-    constructor(private extensionUri: vscode.Uri, private javaWatcher: JavaFileWatcher) {}
-    resolveWebviewView(webviewView: vscode.WebviewView) {
-        webviewView.webview.options = {
-            enableScripts: true,
-            localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
-        };
-        webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
-        this.javaWatcher.addWebview(webviewView.webview);
-        //ensure proper disposing
-        webviewView.onDidDispose( () => this.javaWatcher.removeWebview(webviewView.webview));
-    }
+  //add WebviewManager to sidebar
+  constructor(private extensionUri: vscode.Uri, private webviewManager: WebviewManager) { }
+  resolveWebviewView(webviewView: vscode.WebviewView) {
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
+    };
+    webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
+    // Note: WebviewView is managed separately by VS Code, not by WebviewManager
+  }
 }
 
 // new canvas-based city visualization that renders an isometric grid and buildings from AST data
@@ -532,4 +517,4 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
 }
 
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }
