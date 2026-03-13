@@ -1,48 +1,43 @@
 import * as vscode from 'vscode';
+import { ClassInfo } from './parser/javaExtractor';
+
+interface StoreEntry {
+  status: 'pending' | 'parsed';
+  data?: ClassInfo[];
+}
 
 /**
- * Simple in-memory store for parsed results of files.
- * The AST integration will replace the "parsed" value with real AST objects later.
+ * Typed in-memory store: URI string → parsed ClassInfo[] for that file.
  */
 export class FileParseStore {
-	private store: Map<string, any>;
+  private store: Map<string, StoreEntry>;
 
-	constructor() {
-		this.store = new Map();
-	}
+  constructor() {
+    this.store = new Map();
+  }
 
-	/**
-	 * Mark a file as pending parse (placeholder)
-	 */
-	markPending(uri: vscode.Uri) {
-		this.store.set(uri.toString(), { status: 'pending' });
-	}
+  /** Mark a file as pending parse */
+  markPending(uri: vscode.Uri) {
+    this.store.set(uri.toString(), { status: 'pending' });
+  }
 
-	/**
-	 * Save parsed results for a file. `parsed` is opaque for now.
-	 */
-	setParsed(uri: vscode.Uri, parsed: any) {
-		this.store.set(uri.toString(), { status: 'parsed', data: parsed });
-	}
+  /** Save parsed ClassInfo[] for a file */
+  setParsed(uri: vscode.Uri, data: ClassInfo[]) {
+    this.store.set(uri.toString(), { status: 'parsed', data });
+  }
 
-	/**
-	 * Remove a file from the store (e.g., on delete)
-	 */
-	remove(uri: vscode.Uri) {
-		this.store.delete(uri.toString());
-	}
+  /** Remove a file from the store (e.g. on delete) */
+  remove(uri: vscode.Uri) {
+    this.store.delete(uri.toString());
+  }
 
-	/**
-	 * Get the stored entry for a file, or undefined.
-	 */
-	get(uri: vscode.Uri) {
-		return this.store.get(uri.toString());
-	}
+  /** Get the stored entry for a file, or undefined */
+  get(uri: vscode.Uri): StoreEntry | undefined {
+    return this.store.get(uri.toString());
+  }
 
-	/**
-	 * Return a shallow snapshot of all stored entries.
-	 */
-	snapshot() {
-		return Array.from(this.store.entries()).map(([k, v]) => ({ uri: k, entry: v }));
-	}
+  /** Return a shallow snapshot of all stored entries */
+  snapshot(): Array<{ uri: string; entry: StoreEntry }> {
+    return Array.from(this.store.entries()).map(([k, v]) => ({ uri: k, entry: v }));
+  }
 }
