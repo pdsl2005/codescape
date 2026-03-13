@@ -122,10 +122,62 @@ function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWa
   // html content for the web viewer
   panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
   //listen for messages FROM the webview
-  panel.webview.onDidReceiveMessage(message => {
+  panel.webview.onDidReceiveMessage(async message => {
     console.log('Received from webview:', message);
-    javaWatcher.addWebview(panel.webview);
+    if (message.type === 'EXPORT_HTML') {
+      const htmlContent = generateStandaloneHtml(message.payload.fileData);
+      const uri = await vscode.window.showSaveDialog({
+        filters: { 'HTML': ['html'] },
+        defaultUri: vscode.Uri.file('codescape-city.html')
+      });
+      if (uri) {
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(htmlContent));
+        vscode.window.showInformationMessage('City exported as HTML!');
+      }
+    }
+    if (message.type === 'EXPORT_JSON') {
+      const uri = await vscode.window.showSaveDialog({
+        filters: { 'JSON': ['json'] },
+        defaultUri: vscode.Uri.file('codescape-city.json')
+      });
+      if (uri) {
+        await vscode.workspace.fs.writeFile(
+          uri,
+          Buffer.from(JSON.stringify(message.payload, null, 2))
+        );
+        vscode.window.showInformationMessage('City state exported as JSON!');
+      }
+    }
   });
+
+  function generateStandaloneHtml(fileData: any[]): string {
+    // Read the JS files and inline them
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <title>Codescape City</title>
+        <style>
+          body { margin: 0; overflow: hidden; background: #1a1a2e; }
+          canvas { display: block; }
+        </style>
+      </head>
+      <body>
+        <canvas id="cityCanvas"></canvas>
+        <script>
+          // Inline renderer.js content here
+          // Inline uml.js content here
+          // Inline the setup script with fileData baked in
+          const fileData = ${JSON.stringify(fileData)};
+          // ... rest of render logic
+        </script>
+      </body>
+      </html>
+    `;
+  }
+
+  //send mock data TO the webview
+    javaWatcher.addWebview(panel.webview);
   
   //send mock data TO the webview (Change this to run a full state change)
   panel.webview.postMessage({
@@ -518,6 +570,48 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
             zoomLevel = Math.max(zoomLevel * 0.9, 0.3);
           }
           render();
+        });
+
+        // export button
+        const exportBtn = document.createElement('button');
+        exportBtn.textContent = 'Export PNG';
+        exportBtn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:100;padding:4px 8px;background:#598BAF;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
+        document.body.appendChild(exportBtn);
+
+        const exportHtmlBtn = document.createElement('button');
+        exportHtmlBtn.textContent = 'Export HTML';
+        exportHtmlBtn.style.cssText = 'position:fixed;top:35px;right:10px;z-index:100;padding:4px 8px;background:#8B5CF6;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
+        document.body.appendChild(exportHtmlBtn);
+
+        const exportJsonBtn = document.createElement('button');
+        exportJsonBtn.textContent = 'Export JSON';
+        exportJsonBtn.style.cssText = 'position:fixed;top:60px;right:10px;z-index:100;padding:4px 8px;background:#10B981;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
+        document.body.appendChild(exportJsonBtn);
+
+        exportBtn.addEventListener('click', () => {
+          // Re-render without zoom to get clean capture
+          const link = document.createElement('a');
+          link.download = 'codescape-city.png';
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+        });
+
+        exportHtmlBtn.addEventListener('click', () => {
+          vscode.postMessage({
+            type: 'EXPORT_HTML',
+            payload: { fileData: fileData }
+          });
+        });
+
+        exportJsonBtn.addEventListener('click', () => {
+          vscode.postMessage({
+            type: 'EXPORT_JSON',
+            payload: {
+              fileData: fileData,
+              zoomLevel: zoomLevel,
+              tileSize: TILE_L
+            }
+          });
         });
 
         //initial render
