@@ -100,5 +100,14 @@ export interface ReadyMessage {
   type: 'READY';
 }
 
+/** Message from webview → extension: user clicked a building and wants to open its class source. */
+export interface OpenClassSourceMessage {
+  type: 'OPEN_CLASS_SOURCE';
+  payload: {
+    /** Simple identifier; extension maps this back to a file via the parse store. */
+    className: string;
+  };
+}
+
 /** All message types from webview → extension. */
-export type ExtensionMessage = ReadyMessage;
+export type ExtensionMessage = ReadyMessage | OpenClassSourceMessage;
