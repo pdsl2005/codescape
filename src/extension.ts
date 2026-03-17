@@ -5,19 +5,17 @@ import * as path from "path";
 import { FileParseStore } from "./state";
 import { JavaFileWatcher } from "./JavaFileWatcher";
 import { initializeParser } from "./parser";
-import { parseAndStore, ensureInitialized } from './parser';
-import { minimatch } from 'minimatch';
-
-
-
-
+import { parseAndStore, ensureInitialized } from "./parser";
+import { minimatch } from "minimatch";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
   console.log("CODESCAPE ACTIVATED");
   const store = new FileParseStore();
-  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store));
+  const scan = vscode.commands.registerCommand("codescape.scan", () =>
+    workspaceScan(store),
+  );
   const javaWatcher = new JavaFileWatcher(store);
   await initializeParser();
 
@@ -28,16 +26,17 @@ export async function activate(context: vscode.ExtensionContext) {
   // sidebar view
   const provider = new CodescapeViewProvider(context.extensionUri, javaWatcher);
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('codescape.Cityview', provider)
+    vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
   );
-  const create = vscode.commands.registerCommand('codescape.createPanel', () => createPanel(context, javaWatcher));
+  const create = vscode.commands.registerCommand("codescape.createPanel", () =>
+    createPanel(context, javaWatcher),
+  );
   // Parse all existing Java files on startup
   const existingFiles = await getJavaFiles();
 
   for (const uri of existingFiles) {
     await parseAndStore(uri, store);
   }
-
 
   const dumpDisposable = vscode.commands.registerCommand(
     "codescape.dumpParseStore",
@@ -101,47 +100,52 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(javaWatcher);
   context.subscriptions.push(create);
   context.subscriptions.push(scan);
-  
 }
 
-function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWatcher){
-    
+function createPanel(
+  context: vscode.ExtensionContext,
+  javaWatcher: JavaFileWatcher,
+) {
   const panel = vscode.window.createWebviewPanel(
     // internal ID
-    'codescapeWebview',
-    // title shown to user  
-    'Codescape',
+    "codescapeWebview",
+    // title shown to user
+    "Codescape",
     vscode.ViewColumn.One,
     {
       // lets the webview run JavaScript
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'src', 'webview')]
-    }
+      localResourceRoots: [
+        vscode.Uri.joinPath(context.extensionUri, "src", "webview"),
+      ],
+    },
   );
 
   // html content for the web viewer
   panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
   //listen for messages FROM the webview
-  panel.webview.onDidReceiveMessage(message => {
-    console.log('Received from webview:', message);
+  panel.webview.onDidReceiveMessage((message) => {
+    console.log("Received from webview:", message);
     javaWatcher.addWebview(panel.webview);
   });
-  
+
   //send mock data TO the webview (Change this to run a full state change)
   panel.webview.postMessage({
-    type: 'AST_DATA',
+    type: "AST_DATA",
     payload: {
       files: [
         {
-          name: 'App.tsx',
+          name: "App.tsx",
           lines: 120,
           functions: 4,
-          classes: 2
-        }
-      ]
-    }
+          classes: 2,
+        },
+      ],
+    },
   });
-  panel.onDidDispose( () =>{javaWatcher.removeWebview(panel.webview)});
+  panel.onDidDispose(() => {
+    javaWatcher.removeWebview(panel.webview);
+  });
 }
 
 async function workspaceScan(store: FileParseStore) {
@@ -149,7 +153,9 @@ async function workspaceScan(store: FileParseStore) {
   const files = await getJavaFiles();
 
   console.log(`Found ${files.length} Java files. Starting parse...`);
-  vscode.window.showInformationMessage(`Codescape: Scanning and parsing ${files.length} Java files...`);
+  vscode.window.showInformationMessage(
+    `Codescape: Scanning and parsing ${files.length} Java files...`,
+  );
 
   let successCount = 0;
   let failureCount = 0;
@@ -166,9 +172,12 @@ async function workspaceScan(store: FileParseStore) {
   }
 
   const snap = store.snapshot();
-  console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
-  vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
-  
+  console.log(
+    `Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`,
+  );
+  vscode.window.showInformationMessage(
+    `Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`,
+  );
 }
 
 // async function workspaceScan(): Promise<vscode.Uri[]> {
@@ -219,18 +228,28 @@ export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
 
 // sidebar view
 class CodescapeViewProvider implements vscode.WebviewViewProvider {
-    //add filewatcher to sidebar
-    constructor(private extensionUri: vscode.Uri, private javaWatcher: JavaFileWatcher) {}
-    resolveWebviewView(webviewView: vscode.WebviewView) {
-        webviewView.webview.options = {
-            enableScripts: true,
-            localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
-        };
-        webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
-        this.javaWatcher.addWebview(webviewView.webview);
-        //ensure proper disposing
-        webviewView.onDidDispose( () => this.javaWatcher.removeWebview(webviewView.webview));
-    }
+  //add filewatcher to sidebar
+  constructor(
+    private extensionUri: vscode.Uri,
+    private javaWatcher: JavaFileWatcher,
+  ) {}
+  resolveWebviewView(webviewView: vscode.WebviewView) {
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        vscode.Uri.joinPath(this.extensionUri, "src", "webview"),
+      ],
+    };
+    webviewView.webview.html = getWebviewContent(
+      webviewView.webview,
+      this.extensionUri,
+    );
+    this.javaWatcher.addWebview(webviewView.webview);
+    //ensure proper disposing
+    webviewView.onDidDispose(() =>
+      this.javaWatcher.removeWebview(webviewView.webview),
+    );
+  }
 }
 
 // new canvas-based city visualization that renders an isometric grid and buildings from AST data
@@ -290,6 +309,9 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         // loading | ready | empty | error
         status: "loading" 
         };
+
+        let buildingRegistry = [];
+        let hoveredBuilding = null;
 
         //state update function that also triggers a re-render
         function updateState(newData) {
@@ -365,13 +387,51 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
 
         state.colors = newColorMap;
       }
+
+      function getCanvasCoordinates(event) {
+
+      const rect = canvas.getBoundingClientRect();
+
+        return {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top
+        };
+      }
+
+      function getBuildingAtPosition(canvasX, canvasY) {
+        for (let i = buildingRegistry.length - 1; i >= 0; i--) {
+          const b = buildingRegistry[i];
+      
+          const inside =
+            canvasX >= b.x &&
+            canvasX <= b.x + b.width &&
+            canvasY >= b.y &&
+            canvasY <= b.y + b.height;
+
+          if (inside) {
+            return b;
+          }
+        }
+
+        return null;
+      }
+
+      canvas.addEventListener("mousemove", (event) => {
+
+        const { x, y } = getCanvasCoordinates(event);
+        const building = getBuildingAtPosition(x, y);
+        
+        if (hoveredBuilding !== building) {
+          hoveredBuilding = building;
+          render();
+        }
+      });
     
-
-
-        //now only reads from state
-
         function render() {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // reset each frame
+          buildingRegistry = [];
 
           ctx.save();
           ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -421,35 +481,70 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
           return;
         }
 
-      //ready state -> render buildings
+      // ready state -> render buildings
       state.classes.forEach((cls) => {
 
-      //get layout position for this class
-      const position = state.layout[cls.Classname];
-      if (!position) return;
+        const position = state.layout[cls.Classname];
+        if (!position) return;
 
-      //building height based on number of methods + fields
-      const floors = Math.max(
-        1,
-        (cls.Methods?.length || 0) +
-        (cls.Fields?.length || 0)
+        const floors = Math.max(
+          1,
+          (cls.Methods?.length || 0) +
+          (cls.Fields?.length || 0)
+        );
+
+        const isoX = (position.col - position.row) * TILE_L / 2 + offsetX;
+        const isoY = (position.col + position.row) * TILE_L / 4 + offsetY;
+
+        placeIsoBuilding(
+          ctx,
+          position.col,
+          position.row,
+          floors,
+          state.colors[cls.Classname] || "#598BAF",
+          TILE_L,
+          offsetX,
+          offsetY
+        );
+
+        const width = TILE_L;
+        const height = floors * TILE_L / 2;
+
+        buildingRegistry.push({
+          className: cls.Classname,
+          x: isoX - width / 2,
+          y: isoY - height,
+          width: width,
+          height: height
+       });
+
+       console.log("buildingRegistry:", buildingRegistry);
+
+      });
+
+      if (hoveredBuilding) {
+
+      const cls = state.classes.find(
+        c => c.Classname === hoveredBuilding.className
       );
 
-      //place building using computed layout
-      placeIsoBuilding(
-        ctx,
-        position.col,
-        position.row,
-        floors,
-        state.colors[cls.Classname] || "#598BAF",
-        TILE_L,
-        offsetX,
-        offsetY
-      );
-    });
+      if (cls) {
 
-    ctx.restore();
-  }
+        drawUmlBox(
+          ctx,
+          hoveredBuilding.x + hoveredBuilding.width + 10,
+          hoveredBuilding.y,
+          {
+            name: cls.Classname,
+            fields: cls.Fields?.map(f => f.name) || [],
+            methods: cls.Methods?.map(m => m.name) || []
+          }
+        );
+      }
+    }
+      // restore canvas transform
+      ctx.restore();
+    }
 
   function drawLoadingMessage() {
     ctx.fillStyle = "white";
