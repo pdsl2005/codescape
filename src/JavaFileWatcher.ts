@@ -83,6 +83,19 @@ export class JavaFileWatcher {
             });
         }
     }
+
+    broadcast(message: any) {
+        if (this._webviews.length === 0) {
+            console.log("[broadcast] no webviews yet");
+            return;
+        }
+
+        for (const v of this._webviews) {
+            v.postMessage(message).then(delivered => {
+            console.log("[broadcast] delivered:", delivered);
+                });
+        }
+    }
     
     dispose(){
         this._watcher.dispose();
