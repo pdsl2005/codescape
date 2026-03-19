@@ -30,7 +30,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('codescape.Cityview', provider)
   );
-  const create = vscode.commands.registerCommand('codescape.createPanel', () => createPanel(context, javaWatcher));
+  const create = vscode.commands.registerCommand('codescape.createPanel', () => createPanel(context, javaWatcher, store));
   // Parse all existing Java files on startup
   const existingFiles = await getJavaFiles();
 
@@ -104,7 +104,60 @@ export async function activate(context: vscode.ExtensionContext) {
   
 }
 
-function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWatcher){
+async function openClassSourceFromClassName(className: string, store: FileParseStore) {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders || workspaceFolders.length === 0) {
+    return;
+  }
+
+  const snapshot = store.snapshot();
+
+  for (const { uri, entry } of snapshot) {
+    if (entry.status !== 'parsed' || !entry.data) continue;
+
+    const match = entry.data.find(c => c.Classname === className);
+    if (!match) continue;
+
+    const fileUri = vscode.Uri.parse(uri);
+
+    const isInWorkspace = workspaceFolders.some((folder: vscode.WorkspaceFolder) =>
+      fileUri.fsPath.startsWith(folder.uri.fsPath + path.sep)
+    );
+    if (!isInWorkspace) {
+      return;
+    }
+
+    try {
+      await vscode.workspace.fs.stat(fileUri);
+    } catch {
+      return;
+    }
+
+    const doc = await vscode.workspace.openTextDocument(fileUri);
+    const editor = await vscode.window.showTextDocument(doc);
+
+    const text = doc.getText();
+    const needle = `class ${className}`;
+    const idx = text.indexOf(needle);
+
+    let targetRange: vscode.Range;
+    if (idx >= 0) {
+      const pos = doc.positionAt(idx);
+      targetRange = new vscode.Range(pos, pos);
+    } else {
+      const pos = new vscode.Position(0, 0);
+      targetRange = new vscode.Range(pos, pos);
+    }
+
+    editor.selection = new vscode.Selection(targetRange.start, targetRange.end);
+    editor.revealRange(targetRange, vscode.TextEditorRevealType.InCenter);
+    return;
+  }
+
+  vscode.window.showInformationMessage(`Could not find source for class ${className}.`);
+}
+
+function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWatcher, store: FileParseStore){
     
   const panel = vscode.window.createWebviewPanel(
     // internal ID
@@ -122,7 +175,7 @@ function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWa
   // html content for the web viewer
   panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
   //listen for messages FROM the webview
-  panel.webview.onDidReceiveMessage(async message => {
+  panel.webview.onDidReceiveMessage(async (message: any) => {
     console.log('Received from webview:', message);
     if (message.type === 'EXPORT_HTML') {
       const htmlContent = generateStandaloneHtml(message.payload.fileData);
@@ -134,6 +187,9 @@ function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWa
         await vscode.workspace.fs.writeFile(uri, Buffer.from(htmlContent));
         vscode.window.showInformationMessage('City exported as HTML!');
       }
+    }
+    if (message.type === 'OPEN_CLASS_SOURCE' && message.payload?.className) {
+      await openClassSourceFromClassName(message.payload.className, store);
     }
     if (message.type === 'EXPORT_JSON') {
       const uri = await vscode.window.showSaveDialog({
@@ -420,8 +476,12 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
     
 
 
-        //now only reads from state
+        // Registry of rendered buildings for hit detection (hover/click).
+        // Each entry is tracked in canvas/world coordinates before zoom.
+        const buildingRegistry = [];
 
+        //now only reads from state
+        
         function render() {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -474,33 +534,78 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         }
 
       //ready state -> render buildings
+      buildingRegistry.length = 0;
       state.classes.forEach((cls) => {
 
-      //get layout position for this class
-      const position = state.layout[cls.Classname];
-      if (!position) return;
+        //get layout position for this class
+        const position = state.layout[cls.Classname];
+        if (!position) return;
 
-      //building height based on number of methods + fields
-      const floors = Math.max(
-        1,
-        (cls.Methods?.length || 0) +
-        (cls.Fields?.length || 0)
-      );
+        //building height based on number of methods + fields
+        const floors = Math.max(
+          1,
+          (cls.Methods?.length || 0) +
+          (cls.Fields?.length || 0)
+        );
 
-      //place building using computed layout
-      placeIsoBuilding(
-        ctx,
-        position.col,
-        position.row,
-        floors,
-        state.colors[cls.Classname] || "#598BAF",
-        TILE_L,
-        offsetX,
-        offsetY
-      );
-    });
+        // Approximate building footprint in canvas/world space for hit detection.
+        const col = position.col;
+        const row = position.row;
+        const isoX = (col - row) * TILE_L / 2 + offsetX;
+        const isoY = (col + row) * TILE_L / 4 + offsetY + TILE_L / 2;
+        const approxHeight = TILE_L + floors * (TILE_L / 2);
+        const bbox = {
+          x: isoX - TILE_L / 2,
+          y: isoY - approxHeight,
+          width: TILE_L,
+          height: approxHeight
+        };
+
+        buildingRegistry.push({
+          className: cls.Classname,
+          x: bbox.x,
+          y: bbox.y,
+          width: bbox.width,
+          height: bbox.height
+        });
+
+        //place building using computed layout
+        placeIsoBuilding(
+          ctx,
+          col,
+          row,
+          floors,
+          state.colors[cls.Classname] || "#598BAF",
+          TILE_L,
+          offsetX,
+          offsetY
+        );
+      });
 
     ctx.restore();
+  }
+
+  function getBuildingAtPosition(canvasX, canvasY) {
+    for (let i = buildingRegistry.length - 1; i >= 0; i--) {
+      const b = buildingRegistry[i];
+
+      const inside =
+        canvasX >= b.x &&
+        canvasX <= b.x + b.width &&
+        canvasY >= b.y &&
+        canvasY <= b.y + b.height;
+
+      if (inside) {
+        return b;
+      }
+    }
+    return null;
+  }
+
+  function screenToWorld(clientX, clientY) {
+    const x = (clientX - canvas.width / 2) / zoomLevel + canvas.width / 2;
+    const y = (clientY - canvas.height / 2) / zoomLevel + canvas.height / 2;
+    return { x, y };
   }
 
   function drawLoadingMessage() {
@@ -610,6 +715,21 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
               fileData: fileData,
               zoomLevel: zoomLevel,
               tileSize: TILE_L
+            }
+          });
+        });
+
+        canvas.addEventListener('click', (e) => {
+          const world = screenToWorld(e.clientX, e.clientY);
+          const building = getBuildingAtPosition(world.x, world.y);
+          if (!building) {
+            return;
+          }
+
+          vscode.postMessage({
+            type: 'OPEN_CLASS_SOURCE',
+            payload: {
+              className: building.className
             }
           });
         });
