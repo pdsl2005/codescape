@@ -22,14 +22,14 @@
         "title": "Codescape Scan"
       }
     ],
-     "views": {
-        "explorer": [
-            {
-                "type": "webview",
-                "id": "codescape.Cityview",
-                "name": "Codescape City"
-            }
-        ]
+    "views": {
+      "explorer": [
+        {
+          "type": "webview",
+          "id": "codescape.Cityview",
+          "name": "Codescape City"
+        }
+      ]
     }
   },
   "scripts": {
@@ -53,6 +53,7 @@
   "dependencies": {
     "minimatch": "^10.1.2",
     "tree-sitter-java": "^0.23.5",
+    "tree-sitter-python": "^0.25.0",
     "web-tree-sitter": "^0.26.5"
   }
 }

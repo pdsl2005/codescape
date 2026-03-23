@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { initParser, extractClasses, ClassInfo } from './parser/javaExtractor';
+import { initPythonParser, extractPythonEntities } from './parser/pythonExtractor';
 import { FileParseStore } from './state';
 import * as path from 'path';
 
@@ -27,17 +28,27 @@ export async function parseJavaFile(uri: vscode.Uri): Promise<ClassInfo[]> {
   return extractClasses(text);
 }
 
+/** Reads a Python file from the workspace and extracts its entities via TreeSitter. */
+export async function parsePythonFile(uri: vscode.Uri): Promise<ClassInfo[]> {
+  await initPythonParser();
+  const bytes = await vscode.workspace.fs.readFile(uri);
+  const text = new TextDecoder().decode(bytes);
+  const moduleName = path.basename(uri.fsPath, '.py');
+  return extractPythonEntities(text, moduleName);
+}
+
 /**
  * Export parsed ClassInfo data to a JSON file next to the source file.
- * For example: Test.java → Test.json
+ * For example: Test.java → Test.json, script.py -> script.json
  */
 async function exportParseResultsAsJson(uri: vscode.Uri, classInfo: ClassInfo[]): Promise<void> {
   try {
-    const javaFilePath = uri.fsPath;
-    const jsonFilePath = javaFilePath.replace(/\.java$/, '.json');
+    const sourceFilePath = uri.fsPath;
+    const parsedPath = path.parse(sourceFilePath);
+    const jsonFilePath = path.join(parsedPath.dir, `${parsedPath.name}.json`);
     const jsonUri = vscode.Uri.file(jsonFilePath);
     const jsonContent = JSON.stringify({
-      sourceFile: path.basename(javaFilePath),
+      sourceFile: path.basename(sourceFilePath),
       parsedAt: new Date().toISOString(),
       classes: classInfo
     }, null, 2);
@@ -62,7 +73,10 @@ export async function parseAndStore(
 
   store.markPending(uri);
   try {
-    const classes = await parseJavaFile(uri);
+    const ext = path.extname(uri.fsPath).toLowerCase();
+    const classes = ext === '.py'
+      ? await parsePythonFile(uri)
+      : await parseJavaFile(uri);
     store.setParsed(uri, classes);
     await exportParseResultsAsJson(uri, classes);
 
