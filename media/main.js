@@ -10,6 +10,8 @@ const TILE_L = 50
 const offsetX = canvas.width/2
 const offsetY = 100;
 const gridLength = 10;
+var cols = gridLength;
+var rows = gridLength;
 
 // BELOW are zoom, pan, naviagation
 const viewportTransform = {
@@ -86,6 +88,7 @@ window.addEventListener("keydown", (e) => {
         viewportTransform.x = 0;
         viewportTransform.y = 0;
         viewportTransform.scale = 1;
+        rotationState = 0;
         render();
     }
 })
@@ -93,8 +96,8 @@ window.addEventListener("keydown", (e) => {
 // BELOW are Render Functions / Tests / Saving / Loading 
 
 // 2d array to check if the buildings are overlapping
-var grid = Array.from({length: gridLength}, ()=>
-Array(gridLength).fill(null));
+//var grid = Array.from({length: gridLength}, ()=>
+//Array(gridLength).fill(null));
 // building dictionary list initialization
 
 // if current building data is saved
@@ -106,6 +109,48 @@ const sample_buildings = [
 
 var buildings = [];
 var new_buildings = [];
+
+// function to sort the building list by depth (adding col + row)
+function sortBuilding(buildings_list) {
+    buildings_list.sort((a, b) => (a.col + a.row) - (b.col + b.row));
+}
+
+// rotation functions
+function rotation0(col, row, cols, rows){
+    return {col, row};
+}
+
+function rotation90(col, row, cols, rows){
+    return {col: rows - 1 - row, row: col};
+}
+
+function rotation180(col, row, cols, rows){
+    return {col: cols - 1 - col, row: rows - 1 - row};
+}
+
+function rotation270(col, row, cols, rows){
+    return {col: row, row: cols - 1 - col};
+}
+
+function rotate_building_list(buildings_list, cols, rows, rotation){
+    return buildings_list.map(b => {
+        const r = rotation(b.col, b.row, cols, rows);
+        return{...b, col: r.col, row: r.row};
+    });
+}
+
+// rotating based on arrow keys
+let rotationState = 0;
+window.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") {
+        rotationState = (rotationState + 1) % 4;
+        render();
+    }
+    if (e.key === "ArrowLeft") {
+        rotationState = (rotationState - 1 + 4) % 4;
+        render();
+    }
+})
 
 // render function for test city view 
 function render() {
@@ -122,68 +167,71 @@ function render() {
 
     drawIsoGrid(ctx, gridLength, gridLength, TILE_L, offsetX, offsetY);
 
-    loadSavedBuildings();
+    if (new_buildings.length !== 0){
+        var combined_list = [... buildings, ... new_buildings];
+        buildings = combined_list;
+        sortBuilding(buildings);
+        saveCityData(buildings);
+    }
+    else{
+        buildings = loadSavedBuildings();
+    }
 
-    for (const b of new_buildings) {
+    const building0 = rotate_building_list(buildings, cols, rows, rotation0);
+    const building90 = rotate_building_list(buildings, cols, rows, rotation90);
+    const building180 = rotate_building_list(buildings, cols, rows, rotation180);
+    const building270 =rotate_building_list(buildings, cols, rows, rotation270);
+
+    const rotatedLists = [building0, building90, building180, building270];
+
+    const currentBuilding_list = rotatedLists[rotationState];
+    sortBuilding(currentBuilding_list);
+
+    for (const b of currentBuilding_list) {
         placeIsoBuilding(b.col, b.row, b.floors, b.color);
     }
 }
 
 // building placement function
 function placeIsoBuilding(col, row, floors, color){
-    if (grid[col][row] !== null) {
-        console.log("Tile already occupied");
-        return false;
-    }
+    //if (grid[col][row] !== null) {
+    //    console.log("Tile already occupied");
+    //    return false;
+    //}
 
     var isoX = (col - row) * TILE_L / 2 + offsetX;
     var isoY = (col + row) * TILE_L / 4 + offsetY;
 
     drawIsoBuilding(ctx, isoX, isoY + TILE_L / 2, (floors - 1), TILE_L, color);
     
-    const building = {col, row, floors, color};
-    grid[col][row] = building;
-    buildings.push(building);
-    return true;
+    //const building = {col, row, floors, color};
+    //grid[col][row] = building;
+    //buildings.push(building);
+    //return true;
 }
-
-// for saved building - don't need to check tile occupation 
-// because when new building is added, it checks before add
-function placeIsoSavedBuilding(col, row, floors, color){
-    var isoX = (col - row) * TILE_L / 2 + offsetX;
-    var isoY = (col + row) * TILE_L / 4 + offsetY;
-
-    drawIsoBuilding(ctx, isoX, isoY + TILE_L / 2, (floors - 1), TILE_L, color);
-    
-    var building = {col, row, floors, color};
-    grid[col][row] = building;
-    buildings.push(building);
-    return true;
-}
-
-
 
 // ADDED for Load & Save -- need change 
 
 // saving current building data
-function saveCityData(){
-    localStorage.setItem("cityData", JSON.stringify(buildings));
+function saveCityData(buildings_list){
+    localStorage.setItem("cityData", JSON.stringify(buildings_list));
 }
 
 // rendering function that loads current data
 function loadSavedBuildings(){
     const savedData = localStorage.getItem("cityData");
     var saved_buildings = JSON.parse(savedData)
-    grid = Array.from({length: gridLength}, ()=>
-        Array(gridLength).fill(null));
-    if (saved_buildings) {
-        saved_buildings.forEach(b => {
-        placeIsoSavedBuilding(b.col, b.row, b.floors, b.color);
-        });
-    }
+    //grid = Array.from({length: gridLength}, ()=>
+    //    Array(gridLength).fill(null));
+    //if (saved_buildings) {
+    //    saved_buildings.forEach(b => {
+    //    placeIsoBuilding(b.col, b.row, b.floors, b.color);
+    //    });
+    //}
+    return saved_buildings;
 }
 
 // TEST
 buildings = sample_buildings;
-saveCityData();
+saveCityData(buildings);
 render();

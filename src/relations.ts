@@ -13,7 +13,7 @@ export interface ClassGraph {
 }
 
 // Collects all class names that a single class depends on.
-// Draws from: Extends, Implements, field types, and constructor parameter types.
+// Draws from: Extends, Implements, field types, constructor parameter types, and parent/inner class relationships.
 function getDependencies(cls: ClassInfo): Set<string> {
   const deps = new Set<string>();
 
@@ -27,14 +27,29 @@ function getDependencies(cls: ClassInfo): Set<string> {
 
   for (const field of cls.Fields) {
     // Strip array/generic suffixes: "List<String>" → "List", "int[]" → "int"
-    const baseType = field.type.replace(/[<\[].*/,'').trim();
+    const baseType = field.type.replace(/[<\[].*/, '').trim();
     if (!PRIMITIVES.has(baseType)) { deps.add(baseType); }
   }
 
   for (const ctor of cls.Constructors) {
     for (const param of ctor.parameters) {
-      const baseType = param.type.replace(/[<\[].*/,'').trim();
+      const baseType = param.type.replace(/[<\[].*/, '').trim();
       if (!PRIMITIVES.has(baseType)) { deps.add(baseType); }
+    }
+  }
+
+  // Add dependencies for inner/nested class relationships
+  // Inner classes depend on their parent class
+  if (cls.parentClass && !PRIMITIVES.has(cls.parentClass)) {
+    deps.add(cls.parentClass);
+  }
+
+  // Inner classes depend on sibling classes in the same parent
+  if (cls.parentClass && cls.innerClasses) {
+    for (const innerClass of cls.innerClasses) {
+      if (!PRIMITIVES.has(innerClass)) {
+        deps.add(innerClass);
+      }
     }
   }
 

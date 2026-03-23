@@ -11,6 +11,11 @@ export interface ParsedClassInfo {
   Type: string;
   Extends: string | null;
   Implements: string[];
+  // Inner/nested class support
+  parentClass?: string;       // Name of parent class (if this is an inner class)
+  innerClasses?: string[];    // Names of inner classes (if this class contains any)
+  isStatic?: boolean;         // Whether this is a static inner class
+  isAnonymous?: boolean;      // Whether this is an anonymous class
 }
 
 /** Single parsed file entry in FULL_STATE or PARTIAL_STATE changed list. */
@@ -100,5 +105,14 @@ export interface ReadyMessage {
   type: 'READY';
 }
 
+/** Message from webview → extension: user clicked a building and wants to open its class source. */
+export interface OpenClassSourceMessage {
+  type: 'OPEN_CLASS_SOURCE';
+  payload: {
+    /** Simple identifier; extension maps this back to a file via the parse store. */
+    className: string;
+  };
+}
+
 /** All message types from webview → extension. */
-export type ExtensionMessage = ReadyMessage;
+export type ExtensionMessage = ReadyMessage | OpenClassSourceMessage;

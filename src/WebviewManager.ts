@@ -211,12 +211,19 @@ export class WebviewManager {
             classes: [],
             layout: {},
             colors: {},
-            status: "loading"
+            status: "loading",
+            classMap: {}  // Map of className -> ClassInfo for quick lookup
           };
 
           function updateState(newData) {
             console.log("update state called with data: ", newData);
             state.classes = newData;
+            
+            // Build class map for quick lookup of inner class relationships
+            state.classMap = {};
+            newData.forEach(cls => {
+              state.classMap[cls.Classname] = cls;
+            });
 
             if (!newData) {
               state.status = "error";
@@ -233,15 +240,40 @@ export class WebviewManager {
 
           function runAutoLayout() {
             state.layout = {};
+            const topLevelClasses = state.classes.filter(cls => !cls.parentClass);
+            const innerClasses = state.classes.filter(cls => cls.parentClass);
 
-            state.classes.forEach((cls, index) => {
+            // Layout top-level classes
+            topLevelClasses.forEach((cls, index) => {
               const col = 3 + index * 2;
               const row = 3 + index;
 
               state.layout[cls.Classname] = {
                 col,
-                row
+                row,
+                depth: 0
               };
+            });
+
+            // Layout inner classes relative to their parent
+            innerClasses.forEach((cls) => {
+              const parent = state.classMap[cls.parentClass];
+              if (parent && state.layout[parent.Classname]) {
+                const parentPos = state.layout[parent.Classname];
+                // Position inner classes offset from parent
+                state.layout[cls.Classname] = {
+                  col: parentPos.col + 2,
+                  row: parentPos.row + 1,
+                  depth: (parentPos.depth || 0) + 1
+                };
+              } else {
+                // Fallback: place as top-level if parent not found
+                state.layout[cls.Classname] = {
+                  col: 20 + Math.random() * 10,
+                  row: 10 + Math.random() * 10,
+                  depth: 1
+                };
+              }
             });
           }
 
@@ -309,19 +341,53 @@ export class WebviewManager {
                 (cls.Fields?.length || 0)
               );
 
+              // Adjust building size based on nesting depth
+              // Inner classes are smaller and positioned slightly offset
+              const depthScale = 1 - ((position.depth || 0) * 0.15);
+              const adjustedFloors = Math.max(1, Math.ceil(floors * depthScale));
+
               placeIsoBuilding(
                 ctx,
                 position.col,
                 position.row,
                 floors,
+                adjustedFloors,
                 state.colors[cls.Classname] || "#598BAF",
                 TILE_L,
                 offsetX,
                 offsetY
               );
+
+              // Add visual indicator for inner classes
+              if (cls.parentClass) {
+                // Draw a connection line to parent (visual indicator)
+                const parentPos = state.layout[cls.parentClass];
+                if (parentPos) {
+                  const fromWorld = colRowToWorld(parentPos.col, parentPos.row, TILE_L, offsetX, offsetY);
+                  const toWorld = colRowToWorld(position.col, position.row, TILE_L, offsetX, offsetY);
+                  
+                  ctx.save();
+                  ctx.strokeStyle = "rgba(200, 200, 200, 0.5)";
+                  ctx.lineWidth = 1;
+                  ctx.setLineDash([2, 2]);
+                  ctx.beginPath();
+                  ctx.moveTo(fromWorld.x, fromWorld.y);
+                  ctx.lineTo(toWorld.x, toWorld.y);
+                  ctx.stroke();
+                  ctx.restore();
+                }
+              }
             });
 
             ctx.restore();
+          }
+
+          // Helper function to convert col/row to world coordinates
+          function colRowToWorld(col, row, tileL, offsetX, offsetY) {
+            const x = offsetX + (col - row) * (tileL / 2);
+            const y = offsetY + (col + row) * (tileL / 4);
+            return { x, y };
+          }
           }
 
           function drawLoadingMessage() {
