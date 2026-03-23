@@ -3,6 +3,7 @@
   "displayName": "codescape",
   "description": "Welcome to Codescapes, where you build cities from your code.",
   "version": "0.0.1",
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -16,6 +17,14 @@
       {
         "command": "codescape.createPanel",
         "title": "Create Panel"
+      },
+      {
+        "command": "codescape.createSidePanel",
+        "title": "Codescape: Open in Side Panel"
+      },
+      {
+        "command": "codescape.createBottomPanel",
+        "title": "Codescape: Open in Bottom Panel"
       },
       {
         "command": "codescape.scan",
