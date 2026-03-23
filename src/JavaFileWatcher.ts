@@ -29,6 +29,31 @@ export class JavaFileWatcher {
             store.remove(uri);
             this.postIncrementalChange({ removed: removedNames });
         });
+
+        // Python file watcher — same incremental pipeline as Java
+        this._pythonWatcher = vscode.workspace.createFileSystemWatcher('**/*.py');
+
+        this._pythonWatcher.onDidCreate(async (uri: vscode.Uri) => {
+            console.log('Python file created:', uri.fsPath);
+            this.handleIncrementalChange(uri, store);
+        });
+
+        this._pythonWatcher.onDidChange(async (uri: vscode.Uri) => {
+            console.log('Python file changed:', uri.fsPath);
+            this.handleIncrementalChange(uri, store);
+        });
+
+        this._pythonWatcher.onDidDelete((uri: vscode.Uri) => {
+            console.log('Python file deleted:', uri.fsPath);
+            const before = store.get(uri);
+            const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
+            store.remove(uri);
+            if (this._webviews.length === 0) {
+                console.log("webviews not initialized yet");
+                return;
+            }
+            this.postIncrementalChange({ removed: removedNames }, this._webviews);
+        });
     }
     private buildPartialStatePayload(
         changedClasses: ClassInfo[],
@@ -58,5 +83,6 @@ export class JavaFileWatcher {
 
     dispose() {
         this._watcher.dispose();
+        this._pythonWatcher.dispose();
     }
 }

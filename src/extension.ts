@@ -46,8 +46,11 @@ export async function activate(context: vscode.ExtensionContext) {
   });
 
   const create = vscode.commands.registerCommand('codescape.createPanel', () => createPanel(context, javaWatcher, store));
-  // Parse all existing Java files on startup
-  const existingFiles = await getJavaFiles();
+  // Parse all existing Java and Python files on startup
+  const existingFiles = [
+    ...await getJavaFiles(),
+    ...await getPythonFiles(),
+  ];
 
   for (const uri of existingFiles) {
     await parseAndStore(uri, store);
@@ -275,11 +278,14 @@ function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWa
 }
 
 async function workspaceScan(store: FileParseStore) {
-  //Get all java files not in exclude
-  const files = await getJavaFiles();
+  // Get all supported source files not in exclude
+  const files = [
+    ...await getJavaFiles(),
+    ...await getPythonFiles(),
+  ];
 
-  console.log(`Found ${files.length} Java files. Starting parse...`);
-  vscode.window.showInformationMessage(`Codescape: Scanning and parsing ${files.length} Java files...`);
+  console.log(`Found ${files.length} source files. Starting parse...`);
+  vscode.window.showInformationMessage(`Codescape: Scanning and parsing ${files.length} source files...`);
 
   let successCount = 0;
   let failureCount = 0;
@@ -336,6 +342,21 @@ async function getJavaFiles(): Promise<vscode.Uri[]> {
   //get all java files and exclude ones in exclude filter
   let javaFiles = await vscode.workspace.findFiles("**/*.java", excludeFilter);
   return javaFiles;
+}
+
+async function getPythonFiles(): Promise<vscode.Uri[]> {
+  const excludeUri = await vscode.workspace.findFiles(".exclude");
+  let excludeFilter = null;
+  if (excludeUri.length > 0) {
+    const content = await vscode.workspace.fs.readFile(excludeUri[0]);
+    let decoded = new TextDecoder("utf-8").decode(content);
+    let excludeFiles = decoded
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.trim() !== "");
+    excludeFilter = "{" + excludeFiles.join(",") + "}";
+  }
+  return vscode.workspace.findFiles("**/*.py", excludeFilter);
 }
 
 export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
