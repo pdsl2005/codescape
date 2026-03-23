@@ -350,6 +350,7 @@ export class WebviewManager {
                 ctx,
                 position.col,
                 position.row,
+                floors,
                 adjustedFloors,
                 state.colors[cls.Classname] || "#598BAF",
                 TILE_L,
