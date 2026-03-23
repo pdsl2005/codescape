@@ -45,7 +45,6 @@ export async function activate(context: vscode.ExtensionContext) {
     webviewManager.createWebview('side');
   });
 
-  const create = vscode.commands.registerCommand('codescape.createPanel', () => createPanel(context, javaWatcher, store));
   // Parse all existing Java and Python files on startup
   const existingFiles = [
     ...await getJavaFiles(),
@@ -277,7 +276,7 @@ function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWa
   panel.onDidDispose( () =>{javaWatcher.removeWebview(panel.webview)});
 }
 
-async function workspaceScan(store: FileParseStore) {
+async function workspaceScan(store: FileParseStore, webviewManager: WebviewManager) {
   // Get all supported source files not in exclude
   const files = [
     ...await getJavaFiles(),

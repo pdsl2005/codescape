@@ -388,7 +388,6 @@ export class WebviewManager {
             const y = offsetY + (col + row) * (tileL / 4);
             return { x, y };
           }
-          }
 
           function drawLoadingMessage() {
             ctx.fillStyle = "white";
