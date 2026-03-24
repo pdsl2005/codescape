@@ -117,4 +117,17 @@ suite('Relations Graph', () => {
     assert.ok(graph.dependsOn.get('Foo')!.has('List'));
   });
 
+  test('sibling inner/nested classes link via parent innerClasses metadata', () => {
+    const parent: ClassInfo = {
+      ...cls('Outer'),
+      innerClasses: ['A', 'B'],
+    };
+    const a: ClassInfo = { ...cls('A'), parentClass: 'Outer' };
+    const b: ClassInfo = { ...cls('B'), parentClass: 'Outer' };
+    const graph = buildGraph([parent, a, b]);
+    assert.ok(graph.dependsOn.get('A')!.has('Outer'));
+    assert.ok(graph.dependsOn.get('A')!.has('B'));
+    assert.ok(graph.dependsOn.get('B')!.has('A'));
+  });
+
 });

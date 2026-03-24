@@ -5,14 +5,11 @@ import { parseAndStore } from './parser';
 import { ClassInfo } from './parser/javaExtractor';
 import { buildGraph, getRelated } from './relations';
 import { WebviewManager } from './WebviewManager';
-
-type IncrementalChangePayload = {
-    changed?: ClassInfo[];
-    related?: ClassInfo[];
-    removed?: string[];
-};
+import { computeCityLayout } from './cityLayout';
+import type { PartialStatePayload } from './types/messages';
 export class JavaFileWatcher {
     private _watcher: vscode.FileSystemWatcher;
+    private _pythonWatcher: vscode.FileSystemWatcher;
 
     constructor(store: FileParseStore, private webviewManager: WebviewManager) {
         this._watcher = vscode.workspace.createFileSystemWatcher('**/*.java');
@@ -27,7 +24,7 @@ export class JavaFileWatcher {
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
             store.remove(uri);
-            this.postIncrementalChange({ removed: removedNames });
+            this.postIncrementalChange(this.buildPartialStatePayload([], removedNames, store));
         });
 
         // Python file watcher — same incremental pipeline as Java
@@ -48,36 +45,37 @@ export class JavaFileWatcher {
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
             store.remove(uri);
-            if (this._webviews.length === 0) {
-                console.log("webviews not initialized yet");
-                return;
-            }
-            this.postIncrementalChange({ removed: removedNames }, this._webviews);
+            this.postIncrementalChange(this.buildPartialStatePayload([], removedNames, store));
         });
     }
     private buildPartialStatePayload(
         changedClasses: ClassInfo[],
         removedNames: string[],
         store: FileParseStore
-    ): { changed: ClassInfo[]; related: ClassInfo[]; removed: string[] } {
+    ): PartialStatePayload {
         const allClasses = store.snapshot().flatMap(e => e.entry.data ?? []);
+        const layout = computeCityLayout(allClasses);
         const graph = buildGraph(allClasses);
         const changedNames = changedClasses.map(c => c.Classname);
         const relatedNames = getRelated([...changedNames, ...removedNames], graph);
         const relatedClasses = allClasses.filter(c => relatedNames.includes(c.Classname));
-        return { changed: changedClasses, related: relatedClasses, removed: removedNames };
+        return {
+            changed: changedClasses,
+            related: relatedClasses,
+            removed: removedNames,
+            fullClasses: allClasses,
+            layout,
+        };
     }
 
     private async handleIncrementalChange(uri: vscode.Uri, store: FileParseStore) {
         if (!await isExcluded(uri)) {
             const { changed, removed } = await parseAndStore(uri, store);
-            //create payload from parsed data
-            const payload: IncrementalChangePayload = this.buildPartialStatePayload(changed, removed, store);
-            //send message to frontend
+            const payload = this.buildPartialStatePayload(changed, removed, store);
             this.postIncrementalChange(payload);
         }
     }
-    private async postIncrementalChange(payload: IncrementalChangePayload) {
+    private postIncrementalChange(payload: PartialStatePayload): void {
         this.webviewManager.broadcastPartialState(payload);
     }
 
