@@ -13,6 +13,7 @@ type IncrementalChangePayload = {
 };
 export class JavaFileWatcher {
     private _watcher: vscode.FileSystemWatcher;
+    private _pythonWatcher: vscode.FileSystemWatcher;
 
     constructor(store: FileParseStore, private webviewManager: WebviewManager) {
         this._watcher = vscode.workspace.createFileSystemWatcher('**/*.java');
@@ -48,11 +49,7 @@ export class JavaFileWatcher {
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
             store.remove(uri);
-            if (this._webviews.length === 0) {
-                console.log("webviews not initialized yet");
-                return;
-            }
-            this.postIncrementalChange({ removed: removedNames }, this._webviews);
+            this.postIncrementalChange({ removed: removedNames });
         });
     }
     private buildPartialStatePayload(

@@ -28,10 +28,6 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
   );
-  const create = vscode.commands.registerCommand("codescape.createPanel", () =>
-    createPanel(context, javaWatcher),
-  );
-
   // Register multi-view commands
   const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
     const panel = webviewManager.createWebview('side');
@@ -184,7 +180,7 @@ async function openClassSourceFromClassName(className: string, store: FileParseS
   vscode.window.showInformationMessage(`Could not find source for class ${className}.`);
 }
 
-function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWatcher, store: FileParseStore){
+function createPanel(context : vscode.ExtensionContext, store: FileParseStore){
     
   const panel = vscode.window.createWebviewPanel(
     // internal ID
@@ -261,9 +257,6 @@ function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWa
     `;
   }
 
-  //send mock data TO the webview
-    javaWatcher.addWebview(panel.webview);
-  
   //send mock data TO the webview (Change this to run a full state change)
   panel.webview.postMessage({
     type: "AST_DATA",
@@ -278,9 +271,7 @@ function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWa
       ],
     },
   });
-  panel.onDidDispose(() => {
-    javaWatcher.removeWebview(panel.webview);
-  });
+  panel.onDidDispose(() => { });
 }
 
 async function workspaceScan(store: FileParseStore, webviewManager: WebviewManager) {
