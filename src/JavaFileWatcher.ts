@@ -12,17 +12,18 @@ type IncrementalChangePayload = {
     removed?: string[];
 };
 export class JavaFileWatcher {
-    private _watcher: vscode.FileSystemWatcher;
+    private _javaWatcher: vscode.FileSystemWatcher;
+    private _pythonWatcher : vscode.FileSystemWatcher;
 
     constructor(store: FileParseStore, private webviewManager: WebviewManager) {
-        this._watcher = vscode.workspace.createFileSystemWatcher('**/*.java');
+        this._javaWatcher = vscode.workspace.createFileSystemWatcher('**/*.java');
 
-        this._watcher.onDidChange(async (uri: vscode.Uri) => {
+        this._javaWatcher.onDidChange(async (uri: vscode.Uri) => {
             console.log('Java file changed:', uri.fsPath);
             this.handleIncrementalChange(uri, store);
         });
 
-        this._watcher.onDidDelete((uri: vscode.Uri) => {
+        this._javaWatcher.onDidDelete((uri: vscode.Uri) => {
             console.log('Java file deleted:', uri.fsPath);
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
@@ -48,11 +49,11 @@ export class JavaFileWatcher {
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
             store.remove(uri);
-            if (this._webviews.length === 0) {
+            if (webviewManager.getActiveViewCount() === 0) {
                 console.log("webviews not initialized yet");
                 return;
             }
-            this.postIncrementalChange({ removed: removedNames }, this._webviews);
+            this.postIncrementalChange({ removed: removedNames });
         });
     }
     private buildPartialStatePayload(
@@ -82,7 +83,7 @@ export class JavaFileWatcher {
     }
 
     dispose() {
-        this._watcher.dispose();
+        this._javaWatcher.dispose();
         this._pythonWatcher.dispose();
     }
 }

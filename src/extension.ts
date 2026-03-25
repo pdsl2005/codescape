@@ -28,24 +28,24 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
   );
-  const create = vscode.commands.registerCommand("codescape.createPanel", () =>
-    createPanel(context, javaWatcher),
-  );
+  // const create = vscode.commands.registerCommand("codescape.createPanel", () =>
+  //   createPanel(context, javaWatcher, store),
+  // );
 
   // Register multi-view commands
   const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
-    const panel = webviewManager.createWebview('side');
+    const panel = webviewManager.createPanel('side');
     console.log('Created side panel webview');
   });
 
   const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
-    const panel = webviewManager.createWebview('bottom');
+    const panel = webviewManager.createPanel('bottom');
     console.log('Created bottom panel webview');
   });
 
   // Legacy create panel command (just create side panel)
   const create = vscode.commands.registerCommand('codescape.createPanel', () => {
-    webviewManager.createWebview('side');
+    webviewManager.createPanel('side');
   });
 
   // Parse all existing Java and Python files on startup
@@ -184,104 +184,104 @@ async function openClassSourceFromClassName(className: string, store: FileParseS
   vscode.window.showInformationMessage(`Could not find source for class ${className}.`);
 }
 
-function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWatcher, store: FileParseStore){
+// function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWatcher, store: FileParseStore){
     
-  const panel = vscode.window.createWebviewPanel(
-    // internal ID
-    "codescapeWebview",
-    // title shown to user
-    "Codescape",
-    vscode.ViewColumn.One,
-    {
-      // lets the webview run JavaScript
-      enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(context.extensionUri, "src", "webview"),
-      ],
-    },
-  );
+//   const panel = vscode.window.createWebviewPanel(
+//     // internal ID
+//     "codescapeWebview",
+//     // title shown to user
+//     "Codescape",
+//     vscode.ViewColumn.One,
+//     {
+//       // lets the webview run JavaScript
+//       enableScripts: true,
+//       localResourceRoots: [
+//         vscode.Uri.joinPath(context.extensionUri, "src", "webview"),
+//       ],
+//     },
+//   );
 
-  // html content for the web viewer
-  panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
-  //listen for messages FROM the webview
-  panel.webview.onDidReceiveMessage(async (message: any) => {
-    console.log('Received from webview:', message);
-    if (message.type === 'EXPORT_HTML') {
-      const htmlContent = generateStandaloneHtml(message.payload.fileData);
-      const uri = await vscode.window.showSaveDialog({
-        filters: { 'HTML': ['html'] },
-        defaultUri: vscode.Uri.file('codescape-city.html')
-      });
-      if (uri) {
-        await vscode.workspace.fs.writeFile(uri, Buffer.from(htmlContent));
-        vscode.window.showInformationMessage('City exported as HTML!');
-      }
-    }
-    if (message.type === 'OPEN_CLASS_SOURCE' && message.payload?.className) {
-      await openClassSourceFromClassName(message.payload.className, store);
-    }
-    if (message.type === 'EXPORT_JSON') {
-      const uri = await vscode.window.showSaveDialog({
-        filters: { 'JSON': ['json'] },
-        defaultUri: vscode.Uri.file('codescape-city.json')
-      });
-      if (uri) {
-        await vscode.workspace.fs.writeFile(
-          uri,
-          Buffer.from(JSON.stringify(message.payload, null, 2))
-        );
-        vscode.window.showInformationMessage('City state exported as JSON!');
-      }
-    }
-  });
+//   // html content for the web viewer
+//   panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
+//   //listen for messages FROM the webview
+//   panel.webview.onDidReceiveMessage(async (message: any) => {
+//     console.log('Received from webview:', message);
+//     if (message.type === 'EXPORT_HTML') {
+//       const htmlContent = generateStandaloneHtml(message.payload.fileData);
+//       const uri = await vscode.window.showSaveDialog({
+//         filters: { 'HTML': ['html'] },
+//         defaultUri: vscode.Uri.file('codescape-city.html')
+//       });
+//       if (uri) {
+//         await vscode.workspace.fs.writeFile(uri, Buffer.from(htmlContent));
+//         vscode.window.showInformationMessage('City exported as HTML!');
+//       }
+//     }
+//     if (message.type === 'OPEN_CLASS_SOURCE' && message.payload?.className) {
+//       await openClassSourceFromClassName(message.payload.className, store);
+//     }
+//     if (message.type === 'EXPORT_JSON') {
+//       const uri = await vscode.window.showSaveDialog({
+//         filters: { 'JSON': ['json'] },
+//         defaultUri: vscode.Uri.file('codescape-city.json')
+//       });
+//       if (uri) {
+//         await vscode.workspace.fs.writeFile(
+//           uri,
+//           Buffer.from(JSON.stringify(message.payload, null, 2))
+//         );
+//         vscode.window.showInformationMessage('City state exported as JSON!');
+//       }
+//     }
+//   });
 
-  function generateStandaloneHtml(fileData: any[]): string {
-    // Read the JS files and inline them
-    return `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <title>Codescape City</title>
-        <style>
-          body { margin: 0; overflow: hidden; background: #1a1a2e; }
-          canvas { display: block; }
-        </style>
-      </head>
-      <body>
-        <canvas id="cityCanvas"></canvas>
-        <script>
-          // Inline renderer.js content here
-          // Inline uml.js content here
-          // Inline the setup script with fileData baked in
-          const fileData = ${JSON.stringify(fileData)};
-          // ... rest of render logic
-        </script>
-      </body>
-      </html>
-    `;
-  }
+//   function generateStandaloneHtml(fileData: any[]): string {
+//     // Read the JS files and inline them
+//     return `
+//       <!DOCTYPE html>
+//       <html lang="en">
+//       <head>
+//         <title>Codescape City</title>
+//         <style>
+//           body { margin: 0; overflow: hidden; background: #1a1a2e; }
+//           canvas { display: block; }
+//         </style>
+//       </head>
+//       <body>
+//         <canvas id="cityCanvas"></canvas>
+//         <script>
+//           // Inline renderer.js content here
+//           // Inline uml.js content here
+//           // Inline the setup script with fileData baked in
+//           const fileData = ${JSON.stringify(fileData)};
+//           // ... rest of render logic
+//         </script>
+//       </body>
+//       </html>
+//     `;
+//   }
 
-  //send mock data TO the webview
-    javaWatcher.addWebview(panel.webview);
+//   //send mock data TO the webview
+//     // javaWatcher.addWebview(panel.webview);
   
-  //send mock data TO the webview (Change this to run a full state change)
-  panel.webview.postMessage({
-    type: "AST_DATA",
-    payload: {
-      files: [
-        {
-          name: "App.tsx",
-          lines: 120,
-          functions: 4,
-          classes: 2,
-        },
-      ],
-    },
-  });
-  panel.onDidDispose(() => {
-    javaWatcher.removeWebview(panel.webview);
-  });
-}
+//   //send mock data TO the webview (Change this to run a full state change)
+//   panel.webview.postMessage({
+//     type: "AST_DATA",
+//     payload: {
+//       files: [
+//         {
+//           name: "App.tsx",
+//           lines: 120,
+//           functions: 4,
+//           classes: 2,
+//         },
+//       ],
+//     },
+//   });
+//   panel.onDidDispose(() => {
+//     // javaWatcher.removeWebview(panel.webview);
+//   });
+// }
 
 async function workspaceScan(store: FileParseStore, webviewManager: WebviewManager) {
   // Get all supported source files not in exclude
@@ -385,17 +385,20 @@ class CodescapeViewProvider implements vscode.WebviewViewProvider {
   //add WebviewManager to sidebar
   constructor(private extensionUri: vscode.Uri, private webviewManager: WebviewManager) { }
   resolveWebviewView(webviewView: vscode.WebviewView) {
+    console.log('resolveWebviewView called, view id:', webviewView.viewType);
+
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
     };
     webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
     // Note: WebviewView is managed separately by VS Code, not by WebviewManager
+    this.webviewManager.addWebview(webviewView);
   }
 }
 
 // new canvas-based city visualization that renders an isometric grid and buildings from AST data
-function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
+export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
   const rendererUri = webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, "src", "webview", "renderer.js"),
   );
@@ -420,7 +423,6 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         const vscode = acquireVsCodeApi();
         const canvas = document.getElementById('cityCanvas');
         const ctx = canvas.getContext('2d');
-
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
@@ -571,7 +573,8 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
     
         // Registry of rendered buildings for hit detection (hover/click).
         // Each entry is tracked in canvas/world coordinates before zoom.
-        const buildingRegistry = [];
+        //NOTE: THIS STOPS RENDER FROM RUNNING
+        //const buildingRegistry = [];
 
         //now only reads from state
         
@@ -691,7 +694,7 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
           }
         );
       }
-    }
+    
       // restore canvas transform
       ctx.restore();
     }
@@ -755,6 +758,7 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
             fileData = msg.payload.files;
             render();
           } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
+           console.log("PARTIAL STATE CHANGE RECIEVE")
            //create default values because may not exist in payload
             const { changed = [], related = [], removed = [] } = msg.payload;
             console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
