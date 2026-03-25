@@ -290,7 +290,7 @@ class CodescapeViewProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
     };
     webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
-    // Note: WebviewView is managed separately by VS Code, not by WebviewManager
+    // Register this WebviewView with WebviewManager so it participates in the shared messaging/management logic
     this.webviewManager.addWebview(webviewView);
   }
 }
@@ -653,7 +653,7 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
             fileData = msg.payload.files;
             render();
           } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
-           console.log("PARTIAL STATE CHANGE RECIEVE")
+           console.log("PARTIAL STATE CHANGE RECEIVE")
            //create default values because may not exist in payload
             const { changed = [], related = [], removed = [] } = msg.payload;
             console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
