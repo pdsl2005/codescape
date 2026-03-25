@@ -26,7 +26,10 @@ export async function activate(context: vscode.ExtensionContext) {
   // sidebar view
   const provider = new CodescapeViewProvider(context.extensionUri, webviewManager);
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('codescape.Cityview', provider)
+    vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
+  );
+  const create = vscode.commands.registerCommand("codescape.createPanel", () =>
+    createPanel(context, javaWatcher),
   );
 
   // Register multi-view commands
@@ -185,15 +188,17 @@ function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWa
     
   const panel = vscode.window.createWebviewPanel(
     // internal ID
-    'codescapeWebview',
-    // title shown to user  
-    'Codescape',
+    "codescapeWebview",
+    // title shown to user
+    "Codescape",
     vscode.ViewColumn.One,
     {
       // lets the webview run JavaScript
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'src', 'webview')]
-    }
+      localResourceRoots: [
+        vscode.Uri.joinPath(context.extensionUri, "src", "webview"),
+      ],
+    },
   );
 
   // html content for the web viewer
@@ -261,19 +266,21 @@ function createPanel(context : vscode.ExtensionContext, javaWatcher : JavaFileWa
   
   //send mock data TO the webview (Change this to run a full state change)
   panel.webview.postMessage({
-    type: 'AST_DATA',
+    type: "AST_DATA",
     payload: {
       files: [
         {
-          name: 'App.tsx',
+          name: "App.tsx",
           lines: 120,
           functions: 4,
-          classes: 2
-        }
-      ]
-    }
+          classes: 2,
+        },
+      ],
+    },
   });
-  panel.onDidDispose( () =>{javaWatcher.removeWebview(panel.webview)});
+  panel.onDidDispose(() => {
+    javaWatcher.removeWebview(panel.webview);
+  });
 }
 
 async function workspaceScan(store: FileParseStore, webviewManager: WebviewManager) {
@@ -445,6 +452,9 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         status: "loading" 
         };
 
+        let buildingRegistry = [];
+        let hoveredBuilding = null;
+
         //state update function that also triggers a re-render
         function updateState(newData) {
         console.log("update state called with data: ", newData);
@@ -519,9 +529,46 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
 
         state.colors = newColorMap;
       }
+
+      function getCanvasCoordinates(event) {
+
+      const rect = canvas.getBoundingClientRect();
+
+        return {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top
+        };
+      }
+
+      function getBuildingAtPosition(canvasX, canvasY) {
+        for (let i = buildingRegistry.length - 1; i >= 0; i--) {
+          const b = buildingRegistry[i];
+      
+          const inside =
+            canvasX >= b.x &&
+            canvasX <= b.x + b.width &&
+            canvasY >= b.y &&
+            canvasY <= b.y + b.height;
+
+          if (inside) {
+            return b;
+          }
+        }
+
+        return null;
+      }
+
+      canvas.addEventListener("mousemove", (event) => {
+
+        const { x, y } = getCanvasCoordinates(event);
+        const building = getBuildingAtPosition(x, y);
+        
+        if (hoveredBuilding !== building) {
+          hoveredBuilding = building;
+          render();
+        }
+      });
     
-
-
         // Registry of rendered buildings for hit detection (hover/click).
         // Each entry is tracked in canvas/world coordinates before zoom.
         const buildingRegistry = [];
@@ -530,6 +577,9 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         
         function render() {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // reset each frame
+          buildingRegistry = [];
 
           ctx.save();
           ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -628,8 +678,23 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         );
       });
 
-    ctx.restore();
-  }
+      if (cls) {
+
+        drawUmlBox(
+          ctx,
+          hoveredBuilding.x + hoveredBuilding.width + 10,
+          hoveredBuilding.y,
+          {
+            name: cls.Classname,
+            fields: cls.Fields?.map(f => f.name) || [],
+            methods: cls.Methods?.map(m => m.name) || []
+          }
+        );
+      }
+    }
+      // restore canvas transform
+      ctx.restore();
+    }
 
   function getBuildingAtPosition(canvasX, canvasY) {
     for (let i = buildingRegistry.length - 1; i >= 0; i--) {
