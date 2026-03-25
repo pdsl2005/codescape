@@ -656,7 +656,7 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
             fileData = msg.payload.files;
             render();
           } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
-           console.log("PARTIAL STATE CHANGE RECIEVE")
+           console.log("PARTIAL STATE CHANGE RECEIVE")
            //create default values because may not exist in payload
             const { changed = [], related = [], removed = [] } = msg.payload;
             console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
