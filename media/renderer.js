@@ -23,6 +23,18 @@ export function drawIsoGrid(ctx, rows, cols, size, offsetX, offsetY) {
     }
 }
 
+// drawing basic cube for building - with image file
+const cubeImg = new Image();
+cubeImg.src = "./images/isoCube.png";
+
+export function drawIsoCubePNG(ctx, img, x, y, tileSize) {
+    const scale = 1.45;
+
+    const size = tileSize * scale; 
+
+    ctx.drawImage(img, (x - size / 2), (y - size + 12), size, size);
+}
+
 // drawing basic cube for building
 export function drawIsoCube(ctx, x, y, width, height, color) {
     const depthX = width / 2;
@@ -90,10 +102,20 @@ function shade(color, percent){
 }
 
 // drawing building based on cube
+/*
 export function drawIsoBuilding(ctx, baseX, baseY, floors, size, color){
     for (let i = 0; i < floors; i ++){
         drawIsoCube(
             ctx, baseX, baseY - i * size/2, size, size, color
+        );
+    }
+}
+*/
+
+export function drawIsoBuilding(ctx, baseX, baseY, floors, size, color){
+    for (let i = 0; i <= floors; i ++){
+        drawIsoCubePNG(
+            ctx, cubeImg, baseX, baseY - i * size/2, size
         );
     }
 }
