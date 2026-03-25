@@ -12,6 +12,12 @@ export interface ClassInfo {
   Implements: string[];
   Fields: FieldInfo[];
   Constructors: ConstructorInfo[];
+
+  // Inner/nested class support
+  parentClass?: string;        // Name of parent class (if this is an inner class)
+  innerClasses?: string[];     // Names of inner classes (if this class contains any)
+  isStatic?: boolean;          // Whether this is a static inner class
+  isAnonymous?: boolean;       // Whether this is an anonymous class
 }
 
 export interface FieldInfo {
@@ -66,20 +72,82 @@ export function extractClasses(source: string): ClassInfo[] {
   }
 
   const results: ClassInfo[] = [];
-  visit(tree.rootNode, results);
+  const classMap = new Map<string, ClassInfo>();
+  visit(tree.rootNode, results, classMap, null);
+  // Post-process to establish parent-child relationships
+  linkInnerClasses(results, classMap);
   return results;
 }
 
 // Recursively walks the syntax tree to find class and interface declarations.
-function visit(node: SyntaxNode, results: ClassInfo[]): void {
+// Tracks parent class context to establish inner class relationships.
+function visit(
+  node: SyntaxNode,
+  results: ClassInfo[],
+  classMap: Map<string, ClassInfo>,
+  parentClassName: string | null
+): void {
   if (node.type === 'class_declaration') {
-    results.push(buildClassInfo(node));
+    const classInfo = buildClassInfo(node, parentClassName);
+    results.push(classInfo);
+    classMap.set(classInfo.Classname, classInfo);
+    // Visit inner classes with this class as parent
+    visitInnerClasses(node, results, classMap, classInfo.Classname);
   } else if (node.type === 'interface_declaration') {
-    results.push(buildInterfaceInfo(node));
+    const interfaceInfo = buildInterfaceInfo(node, parentClassName);
+    results.push(interfaceInfo);
+    classMap.set(interfaceInfo.Classname, interfaceInfo);
+    // Visit inner interfaces with this interface as parent
+    visitInnerClasses(node, results, classMap, interfaceInfo.Classname);
   }
 
-  for (const child of node.namedChildren) {
-    visit(child, results);
+  // For non-class nodes, continue searching
+  if (node.type !== 'class_declaration' && node.type !== 'interface_declaration') {
+    for (const child of node.namedChildren) {
+      visit(child, results, classMap, parentClassName);
+    }
+  }
+}
+
+// Visits only the immediate children of a class/interface body to find inner classes
+function visitInnerClasses(
+  classNode: SyntaxNode,
+  results: ClassInfo[],
+  classMap: Map<string, ClassInfo>,
+  parentClassName: string
+): void {
+  const body = classNode.childForFieldName('body');
+  if (!body) { return; }
+
+  for (const child of body.namedChildren) {
+    if (child.type === 'class_declaration') {
+      const classInfo = buildClassInfo(child, parentClassName);
+      results.push(classInfo);
+      classMap.set(classInfo.Classname, classInfo);
+      // Recursively handle inner classes of inner classes
+      visitInnerClasses(child, results, classMap, classInfo.Classname);
+    } else if (child.type === 'interface_declaration') {
+      const interfaceInfo = buildInterfaceInfo(child, parentClassName);
+      results.push(interfaceInfo);
+      classMap.set(interfaceInfo.Classname, interfaceInfo);
+      visitInnerClasses(child, results, classMap, interfaceInfo.Classname);
+    }
+  }
+}
+
+// Post-processes results to establish parent-to-child relationships
+// so that parents know which inner classes they contain
+function linkInnerClasses(results: ClassInfo[], classMap: Map<string, ClassInfo>): void {
+  for (const classInfo of results) {
+    if (classInfo.parentClass) {
+      const parent = classMap.get(classInfo.parentClass);
+      if (parent) {
+        if (!parent.innerClasses) {
+          parent.innerClasses = [];
+        }
+        parent.innerClasses.push(classInfo.Classname);
+      }
+    }
   }
 }
 
@@ -106,11 +174,12 @@ function extractCommonInfo(node: SyntaxNode): {
 }
 
 // Extracts ClassInfo from a class_declaration node.
-function buildClassInfo(node: SyntaxNode): ClassInfo {
+function buildClassInfo(node: SyntaxNode, parentClassName: string | null = null): ClassInfo {
   const { name, loc, body, methods, fields } = extractCommonInfo(node);
   const constructors = extractConstructors(body);
   const modifiers = getModifiers(node);
   const type = determineType(modifiers);
+  const isStatic = modifiers.includes('static');
 
   // "superclass" field holds the extends clause (e.g. extends BaseService)
   const superclassNode = node.childForFieldName('superclass');
@@ -120,7 +189,7 @@ function buildClassInfo(node: SyntaxNode): ClassInfo {
   const interfacesNode = node.childForFieldName('interfaces');
   const implementsTypes = collectTypeNames(interfacesNode);
 
-  return {
+  const classInfo: ClassInfo = {
     Classname: name,
     Methods: methods,
     Loc: loc,
@@ -130,18 +199,30 @@ function buildClassInfo(node: SyntaxNode): ClassInfo {
     Fields: fields,
     Constructors: constructors,
   };
+
+  // Add inner class metadata if applicable
+  if (parentClassName) {
+    classInfo.parentClass = parentClassName;
+  }
+  if (isStatic) {
+    classInfo.isStatic = true;
+  }
+
+  return classInfo;
 }
 
 // Extracts ClassInfo from an interface_declaration node.
 // Interfaces that extend other interfaces have those listed under Implements.
-function buildInterfaceInfo(node: SyntaxNode): ClassInfo {
+function buildInterfaceInfo(node: SyntaxNode, parentClassName: string | null = null): ClassInfo {
   const { name, loc, body, methods, fields } = extractCommonInfo(node);
+  const modifiers = getModifiers(node);
+  const isStatic = modifiers.includes('static');
 
   // For interfaces, "extends_interfaces" is a child node (not a field)
   const extendsNode = node.namedChildren.find((c: SyntaxNode) => c.type === 'extends_interfaces');
   const extendsList = collectTypeNames(extendsNode);
 
-  return {
+  const interfaceInfo: ClassInfo = {
     Classname: name,
     Methods: methods,
     Loc: loc,
@@ -151,6 +232,16 @@ function buildInterfaceInfo(node: SyntaxNode): ClassInfo {
     Fields: fields,
     Constructors: [], // Interfaces don't have constructors
   };
+
+  // Add inner interface metadata if applicable
+  if (parentClassName) {
+    interfaceInfo.parentClass = parentClassName;
+  }
+  if (isStatic) {
+    interfaceInfo.isStatic = true;
+  }
+
+  return interfaceInfo;
 }
 
 // Pulls modifier keywords (public, abstract, final, etc.) from a declaration node.

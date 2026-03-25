@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { FileParseStore } from "./state";
 import { JavaFileWatcher } from "./JavaFileWatcher";
+import { WebviewManager } from "./WebviewManager";
 import { initializeParser } from "./parser";
 import { parseAndStore } from "./parser";
 import { minimatch } from "minimatch";
@@ -13,10 +14,9 @@ import { minimatch } from "minimatch";
 export async function activate(context: vscode.ExtensionContext) {
   console.log("CODESCAPE ACTIVATED");
   const store = new FileParseStore();
-  const scan = vscode.commands.registerCommand("codescape.scan", () =>
-    workspaceScan(store),
-  );
-  const javaWatcher = new JavaFileWatcher(store);
+  const webviewManager = new WebviewManager(context.extensionUri);
+  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store, webviewManager));
+  const javaWatcher = new JavaFileWatcher(store, webviewManager);
   await initializeParser();
 
   // Use the console to output diagnostic information (console.log) and errors (console.error)
@@ -25,22 +25,44 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // sidebar view
   const provider = new CodescapeViewProvider(
-    context.extensionUri,
-    javaWatcher,
-    store,
-  );
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
-  );
-  const create = vscode.commands.registerCommand("codescape.createPanel", () =>
-    createPanel(context, javaWatcher, store),
-  );
-  // Parse all existing Java files on startup
-  const existingFiles = await getJavaFiles();
+  context.extensionUri,
+  webviewManager,
+);
+
+context.subscriptions.push(
+  vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
+);
+
+// multi panels
+const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
+  webviewManager.createWebview('side');
+});
+
+const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
+  webviewManager.createWebview('bottom');
+});
+
+// legacy command
+const create = vscode.commands.registerCommand('codescape.createPanel', () => {
+  webviewManager.createWebview('side');
+});
+
+  // Parse all existing Java and Python files on startup
+  const existingFiles = [
+    ...await getJavaFiles(),
+    ...await getPythonFiles(),
+  ];
 
   for (const uri of existingFiles) {
     await parseAndStore(uri, store);
   }
+
+  // Send full state to webview manager after initial parse
+  const fullState = {
+    classes: store.snapshot().flatMap(e => e.entry.data ?? []),
+    status: 'ready'
+  };
+  webviewManager.broadcastFullState(fullState);
 
   const dumpDisposable = vscode.commands.registerCommand(
     "codescape.dumpParseStore",
@@ -103,78 +125,73 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(exportDisposable);
   context.subscriptions.push(javaWatcher);
   context.subscriptions.push(create);
+  context.subscriptions.push(createSidePanel);
+  context.subscriptions.push(createBottomPanel);
   context.subscriptions.push(scan);
 }
 
-function sendFullState(javaWatcher: JavaFileWatcher, store: FileParseStore) {
-  const snap = store.snapshot();
+async function openClassSourceFromClassName(className: string, store: FileParseStore) {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders || workspaceFolders.length === 0) {
+    return;
+  }
 
-  const classes = snap
-    .filter(({ entry }) => entry.status === "parsed")
-    .flatMap(({ entry }) => entry.data || []);
+  const snapshot = store.snapshot();
 
-  const payload = {
-    classes,
-    status: classes.length === 0 ? "empty" : "ready",
-  };
+  for (const { uri, entry } of snapshot) {
+    if (entry.status !== 'parsed' || !entry.data) continue;
 
-  console.log("[FULL_STATE] sending:", payload.classes.length, "classes");
+    const match = entry.data.find(c => c.Classname === className);
+    if (!match) continue;
 
-  javaWatcher.broadcast({
-    type: "FULL_STATE",
-    payload,
-  });
-}
+    const fileUri = vscode.Uri.parse(uri);
 
-console.log("CREATE PANEL CALLED");
-function createPanel(
-  context: vscode.ExtensionContext,
-  javaWatcher: JavaFileWatcher,
-  store: FileParseStore,
-) {
-  const panel = vscode.window.createWebviewPanel(
-    // internal ID
-    "codescapeWebview",
-    // title shown to user
-    "Codescape",
-    vscode.ViewColumn.One,
-    {
-      // lets the webview run JavaScript
-      enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(context.extensionUri, "src", "webview"),
-      ],
-    },
-  );
-
-  // html content for the web viewer
-  panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
-  //listen for messages FROM the webview
-  panel.webview.onDidReceiveMessage((message) => {
-    console.log("Received from webview:", message);
-
-    if (message.type === "READY") {
-      console.log("WEBVIEW READY RECEIVED");
-      javaWatcher.addWebview(panel.webview);
-
-      //send FULL_STATE when frontend is ready
-      sendFullState(javaWatcher, store);
+    const isInWorkspace = workspaceFolders.some((folder: vscode.WorkspaceFolder) =>
+      fileUri.fsPath.startsWith(folder.uri.fsPath + path.sep)
+    );
+    if (!isInWorkspace) {
+      return;
     }
-  });
 
-  panel.onDidDispose(() => {
-    javaWatcher.removeWebview(panel.webview);
-  });
+    try {
+      await vscode.workspace.fs.stat(fileUri);
+    } catch {
+      return;
+    }
+
+    const doc = await vscode.workspace.openTextDocument(fileUri);
+    const editor = await vscode.window.showTextDocument(doc);
+
+    const text = doc.getText();
+    const needle = `class ${className}`;
+    const idx = text.indexOf(needle);
+
+    let targetRange: vscode.Range;
+    if (idx >= 0) {
+      const pos = doc.positionAt(idx);
+      targetRange = new vscode.Range(pos, pos);
+    } else {
+      const pos = new vscode.Position(0, 0);
+      targetRange = new vscode.Range(pos, pos);
+    }
+
+    editor.selection = new vscode.Selection(targetRange.start, targetRange.end);
+    editor.revealRange(targetRange, vscode.TextEditorRevealType.InCenter);
+    return;
+  }
+
+  vscode.window.showInformationMessage(`Could not find source for class ${className}.`);
 }
 
-async function workspaceScan(store: FileParseStore) {
-  //Get all java files not in exclude
-  const files = await getJavaFiles();
+async function workspaceScan(store: FileParseStore, webviewManager: WebviewManager) {
+  // Get all supported source files not in exclude
+  const files = [
+    ...await getJavaFiles(),
+    ...await getPythonFiles(),
+  ];
 
-  console.log(`Found ${files.length} Java files. Starting parse...`);
-  vscode.window.showInformationMessage(
-    `Codescape: Scanning and parsing ${files.length} Java files...`,
-  );
+  console.log(`Found ${files.length} source files. Starting parse...`);
+  vscode.window.showInformationMessage(`Codescape: Scanning and parsing ${files.length} source files...`);
 
   let successCount = 0;
   let failureCount = 0;
@@ -191,12 +208,15 @@ async function workspaceScan(store: FileParseStore) {
   }
 
   const snap = store.snapshot();
-  console.log(
-    `Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`,
-  );
-  vscode.window.showInformationMessage(
-    `Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`,
-  );
+  console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
+  vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
+
+  // Broadcast updated full state to all webviews
+  const fullState = {
+    classes: snap.flatMap(e => e.entry.data ?? []),
+    status: successCount > 0 ? 'ready' : 'empty'
+  };
+  webviewManager.broadcastFullState(fullState);
 }
 
 // async function workspaceScan(): Promise<vscode.Uri[]> {
@@ -230,6 +250,21 @@ async function getJavaFiles(): Promise<vscode.Uri[]> {
   return javaFiles;
 }
 
+async function getPythonFiles(): Promise<vscode.Uri[]> {
+  const excludeUri = await vscode.workspace.findFiles(".exclude");
+  let excludeFilter = null;
+  if (excludeUri.length > 0) {
+    const content = await vscode.workspace.fs.readFile(excludeUri[0]);
+    let decoded = new TextDecoder("utf-8").decode(content);
+    let excludeFiles = decoded
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.trim() !== "");
+    excludeFilter = "{" + excludeFiles.join(",") + "}";
+  }
+  return vscode.workspace.findFiles("**/*.py", excludeFilter);
+}
+
 export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
   const excludeUri = await vscode.workspace.findFiles(".exclude");
   const path = vscode.workspace.asRelativePath(uri);
@@ -247,41 +282,23 @@ export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
 
 // sidebar view
 class CodescapeViewProvider implements vscode.WebviewViewProvider {
-  //add filewatcher to sidebar
-  constructor(
-    private extensionUri: vscode.Uri,
-    private javaWatcher: JavaFileWatcher,
-    private store: FileParseStore,
-  ) {}
+  //add WebviewManager to sidebar
+  constructor(private extensionUri: vscode.Uri, private webviewManager: WebviewManager) { }
   resolveWebviewView(webviewView: vscode.WebviewView) {
+    console.log('resolveWebviewView called, view id:', webviewView.viewType);
+
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(this.extensionUri, "src", "webview"),
-      ],
+      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
     };
-    webviewView.webview.html = getWebviewContent(
-      webviewView.webview,
-      this.extensionUri,
-    );
-    this.javaWatcher.addWebview(webviewView.webview);
-
-    webviewView.webview.onDidReceiveMessage((message) => {
-      if (message.type === "READY") {
-        console.log("SIDEBAR READY");
-        sendFullState(this.javaWatcher, this.store);
-      }
-    });
-
-    //ensure proper disposing
-    webviewView.onDidDispose(() =>
-      this.javaWatcher.removeWebview(webviewView.webview),
-    );
+    webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
+    // Register this WebviewView with WebviewManager so it participates in the shared messaging/management logic
+    this.webviewManager.addWebview(webviewView);
   }
 }
 
 // new canvas-based city visualization that renders an isometric grid and buildings from AST data
-function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
+export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
   const rendererUri = webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, "src", "webview", "renderer.js"),
   );
@@ -306,7 +323,6 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         const vscode = acquireVsCodeApi();
         const canvas = document.getElementById('cityCanvas');
         const ctx = canvas.getContext('2d');
-
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
@@ -513,6 +529,13 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         }
       });
     
+        // Registry of rendered buildings for hit detection (hover/click).
+        // Each entry is tracked in canvas/world coordinates before zoom.
+        //NOTE: THIS STOPS RENDER FROM RUNNING
+        //const buildingRegistry = [];
+
+        //now only reads from state
+        
         function render() {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -580,49 +603,50 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
 
     sortedClasses.forEach((cls) => {
 
+        //get layout position for this class
         const position = state.layout[cls.Classname];
         if (!position) return;
 
+        //building height based on number of methods + fields
         const floors = Math.max(
           1,
           (cls.Methods?.length || 0) +
           (cls.Fields?.length || 0)
         );
 
-        const isoX = (position.col - position.row) * TILE_L / 2 + offsetX;
-        const isoY = (position.col + position.row) * TILE_L / 4 + offsetY;
+        // Approximate building footprint in canvas/world space for hit detection.
+        const col = position.col;
+        const row = position.row;
+        const isoX = (col - row) * TILE_L / 2 + offsetX;
+        const isoY = (col + row) * TILE_L / 4 + offsetY + TILE_L / 2;
+        const approxHeight = TILE_L + floors * (TILE_L / 2);
+        const bbox = {
+          x: isoX - TILE_L / 2,
+          y: isoY - approxHeight,
+          width: TILE_L,
+          height: approxHeight
+        };
 
+        buildingRegistry.push({
+          className: cls.Classname,
+          x: bbox.x,
+          y: bbox.y,
+          width: bbox.width,
+          height: bbox.height
+        });
+
+        //place building using computed layout
         placeIsoBuilding(
           ctx,
-          position.col,
-          position.row,
+          col,
+          row,
           floors,
           state.colors[cls.Classname] || "#598BAF",
           TILE_L,
           offsetX,
           offsetY
         );
-
-        const width = TILE_L;
-        const height = floors * TILE_L / 2;
-
-        buildingRegistry.push({
-          className: cls.Classname,
-          x: isoX - width / 2,
-          y: isoY - height,
-          width: width,
-          height: height
-       });
-
-       console.log("buildingRegistry:", buildingRegistry);
-
       });
-
-      if (hoveredBuilding) {
-
-      const cls = state.classes.find(
-        c => c.Classname === hoveredBuilding.className
-      );
 
       if (cls) {
 
@@ -637,10 +661,33 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
           }
         );
       }
-    }
+    
       // restore canvas transform
       ctx.restore();
     }
+
+  function getBuildingAtPosition(canvasX, canvasY) {
+    for (let i = buildingRegistry.length - 1; i >= 0; i--) {
+      const b = buildingRegistry[i];
+
+      const inside =
+        canvasX >= b.x &&
+        canvasX <= b.x + b.width &&
+        canvasY >= b.y &&
+        canvasY <= b.y + b.height;
+
+      if (inside) {
+        return b;
+      }
+    }
+    return null;
+  }
+
+  function screenToWorld(clientX, clientY) {
+    const x = (clientX - canvas.width / 2) / zoomLevel + canvas.width / 2;
+    const y = (clientY - canvas.height / 2) / zoomLevel + canvas.height / 2;
+    return { x, y };
+  }
 
   function drawLoadingMessage() {
     ctx.fillStyle = "white";
@@ -749,6 +796,63 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
           render();
         });
 
+        // export button
+        const exportBtn = document.createElement('button');
+        exportBtn.textContent = 'Export PNG';
+        exportBtn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:100;padding:4px 8px;background:#598BAF;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
+        document.body.appendChild(exportBtn);
+
+        const exportHtmlBtn = document.createElement('button');
+        exportHtmlBtn.textContent = 'Export HTML';
+        exportHtmlBtn.style.cssText = 'position:fixed;top:35px;right:10px;z-index:100;padding:4px 8px;background:#8B5CF6;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
+        document.body.appendChild(exportHtmlBtn);
+
+        const exportJsonBtn = document.createElement('button');
+        exportJsonBtn.textContent = 'Export JSON';
+        exportJsonBtn.style.cssText = 'position:fixed;top:60px;right:10px;z-index:100;padding:4px 8px;background:#10B981;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
+        document.body.appendChild(exportJsonBtn);
+
+        exportBtn.addEventListener('click', () => {
+          // Re-render without zoom to get clean capture
+          const link = document.createElement('a');
+          link.download = 'codescape-city.png';
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+        });
+
+        exportHtmlBtn.addEventListener('click', () => {
+          vscode.postMessage({
+            type: 'EXPORT_HTML',
+            payload: { fileData: fileData }
+          });
+        });
+
+        exportJsonBtn.addEventListener('click', () => {
+          vscode.postMessage({
+            type: 'EXPORT_JSON',
+            payload: {
+              fileData: fileData,
+              zoomLevel: zoomLevel,
+              tileSize: TILE_L
+            }
+          });
+        });
+
+        canvas.addEventListener('click', (e) => {
+          const world = screenToWorld(e.clientX, e.clientY);
+          const building = getBuildingAtPosition(world.x, world.y);
+          if (!building) {
+            return;
+          }
+
+          vscode.postMessage({
+            type: 'OPEN_CLASS_SOURCE',
+            payload: {
+              className: building.className
+            }
+          });
+        });
+
         //initial render
         render();
 
@@ -761,4 +865,4 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
 }
 
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }

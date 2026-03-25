@@ -36,7 +36,7 @@ suite('Watcher and Store', () => {
 		store.setParsed(uri, info);
 		e = store.get(uri);
 		assert.strictEqual(e!.status, 'parsed');
-		assert.deepStrictEqual(e!.data, { foo: 'bar' });
+		assert.deepStrictEqual(e!.data, info);
 		store.remove(uri);
 		e = store.get(uri);
 		assert.strictEqual(e, undefined);
