@@ -53,16 +53,17 @@ export function extractPythonEntities(source: string, moduleName: string): Class
   }
 
   const results: ClassInfo[] = [];
+  const classMap = new Map<string, ClassInfo>();
   const root = tree.rootNode;
 
-  // Top-level class definitions (including decorated classes)
+  // Top-level class definitions (including decorated); nested classes recurse into body
   for (const child of root.namedChildren) {
     if (child.type === 'class_definition') {
-      results.push(buildClassInfo(child));
+      visitPythonClass(child, null, results, classMap);
     } else if (child.type === 'decorated_definition') {
       const inner = child.namedChildren.find((c: SyntaxNode) => c.type === 'class_definition');
       if (inner) {
-        results.push(buildClassInfo(inner));
+        visitPythonClass(inner, null, results, classMap);
       }
     }
   }
@@ -71,16 +72,58 @@ export function extractPythonEntities(source: string, moduleName: string): Class
   const moduleEntry = buildModuleEntry(root, moduleName);
   if (moduleEntry) {
     results.push(moduleEntry);
+    classMap.set(moduleEntry.Classname, moduleEntry);
   }
 
+  linkInnerClasses(results, classMap);
   return results;
+}
+
+/** Walk nested class_definition nodes and set parentClass like Java extractor. */
+function visitPythonClass(
+  node: SyntaxNode,
+  parentClassName: string | null,
+  results: ClassInfo[],
+  classMap: Map<string, ClassInfo>
+): void {
+  const info = buildClassInfo(node, parentClassName);
+  results.push(info);
+  classMap.set(info.Classname, info);
+
+  const body = node.childForFieldName('body');
+  if (!body) { return; }
+
+  for (const child of body.namedChildren) {
+    if (child.type === 'class_definition') {
+      visitPythonClass(child, info.Classname, results, classMap);
+    } else if (child.type === 'decorated_definition') {
+      const inner = child.namedChildren.find((c: SyntaxNode) => c.type === 'class_definition');
+      if (inner) {
+        visitPythonClass(inner, info.Classname, results, classMap);
+      }
+    }
+  }
+}
+
+function linkInnerClasses(results: ClassInfo[], classMap: Map<string, ClassInfo>): void {
+  for (const classInfo of results) {
+    if (classInfo.parentClass) {
+      const parent = classMap.get(classInfo.parentClass);
+      if (parent) {
+        if (!parent.innerClasses) {
+          parent.innerClasses = [];
+        }
+        parent.innerClasses.push(classInfo.Classname);
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Class extraction
 // ---------------------------------------------------------------------------
 
-function buildClassInfo(node: SyntaxNode): ClassInfo {
+function buildClassInfo(node: SyntaxNode, parentClassName: string | null = null): ClassInfo {
   const name = node.childForFieldName('name')?.text ?? 'Unknown';
   const loc = node.endPosition.row - node.startPosition.row + 1;
 
@@ -97,7 +140,7 @@ function buildClassInfo(node: SyntaxNode): ClassInfo {
   const fields = extractFields(body, initNode);
   const constructors = initNode ? [buildConstructorInfo(initNode)] : [];
 
-  return {
+  const classInfo: ClassInfo = {
     Classname: name,
     Methods: methods,
     Loc: loc,
@@ -107,6 +150,10 @@ function buildClassInfo(node: SyntaxNode): ClassInfo {
     Fields: fields,
     Constructors: constructors,
   };
+  if (parentClassName) {
+    classInfo.parentClass = parentClassName;
+  }
+  return classInfo;
 }
 
 function extractBaseClasses(superclassesNode: SyntaxNode | null): string[] {

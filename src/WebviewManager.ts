@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { ClassInfo } from './parser/javaExtractor';
+import { buildCityWebviewHtml } from './cityWebviewHtml';
+import type { FullStatePayload, PartialStatePayload } from './types/messages';
 
 type ViewLocation = 'side' | 'bottom';
 
@@ -9,6 +10,8 @@ interface ManagedWebview {
     isReady: boolean;
 }
 
+export type WebviewExtensionMessageHandler = (message: unknown) => void | Promise<void>;
+
 /**
  * WebviewManager handles creating, tracking, and syncing multiple webview panels
  * across different view locations (side pane, bottom panel). Ensures all active
@@ -16,14 +19,19 @@ interface ManagedWebview {
  */
 export class WebviewManager {
     private webviews: Map<string, ManagedWebview> = new Map();
-    private lastFullState: any = null;
-    private messageQueue: Array<{ type: string; payload: any }> = [];
+    private lastFullState: FullStatePayload | null = null;
+    private messageQueue: Array<{ type: string; payload: unknown }> = [];
 
-    constructor(private extensionUri: vscode.Uri) { }
+    constructor(
+        private extensionUri: vscode.Uri,
+        private extensionMessageHandler?: WebviewExtensionMessageHandler,
+    ) { }
 
-    /**
-     * Creates a new webview panel at the specified location
-     */
+    /** Latest FULL_STATE payload (for explorer sidebar sync on READY). */
+    getLastFullState(): FullStatePayload | null {
+        return this.lastFullState;
+    }
+
     createWebview(location: ViewLocation): vscode.WebviewPanel {
         const viewColumn = location === 'side' ? vscode.ViewColumn.Two : vscode.ViewColumn.Nine;
         const title = location === 'side' ? 'Codescape Side' : 'Codescape Bottom';
@@ -50,12 +58,11 @@ export class WebviewManager {
         const viewId = this.generateViewId();
         this.webviews.set(viewId, managedWebview);
 
-        // Listen for ready signal from webview
-        panel.webview.onDidReceiveMessage((message) => {
-            if (message.type === 'READY') {
+        panel.webview.onDidReceiveMessage(async (message: unknown) => {
+            const msg = message as { type?: string };
+            if (msg.type === 'READY') {
                 console.log(`Webview ready: ${viewId}`);
                 managedWebview.isReady = true;
-                // Send full state immediately to new view
                 if (this.lastFullState) {
                     panel.webview.postMessage({
                         type: 'FULL_STATE',
@@ -63,9 +70,11 @@ export class WebviewManager {
                     });
                 }
             }
+            if (this.extensionMessageHandler) {
+                await this.extensionMessageHandler(message);
+            }
         });
 
-        // Handle disposal
         panel.onDidDispose(() => {
             console.log(`Webview disposed: ${viewId}`);
             this.webviews.delete(viewId);
@@ -74,10 +83,7 @@ export class WebviewManager {
         return panel;
     }
 
-    /**
-     * Broadcasts a FULL_STATE message to all active views
-     */
-    broadcastFullState(state: any): void {
+    broadcastFullState(state: FullStatePayload): void {
         this.lastFullState = state;
         const message = {
             type: 'FULL_STATE',
@@ -96,14 +102,7 @@ export class WebviewManager {
         }
     }
 
-    /**
-     * Broadcasts a PARTIAL_STATE (incremental changes) to all active views
-     */
-    broadcastPartialState(payload: {
-        changed?: ClassInfo[];
-        related?: ClassInfo[];
-        removed?: string[];
-    }): void {
+    broadcastPartialState(payload: PartialStatePayload): void {
         const message = {
             type: 'PARTIAL_STATE',
             payload,
@@ -119,16 +118,10 @@ export class WebviewManager {
         }
     }
 
-    /**
-     * Get the number of active webview instances
-     */
     getActiveViewCount(): number {
         return this.webviews.size;
     }
 
-    /**
-     * Check if a specific location has an active view
-     */
     hasLocationActive(location: ViewLocation): boolean {
         for (const managed of this.webviews.values()) {
             if (managed.location === location) {
@@ -138,9 +131,6 @@ export class WebviewManager {
         return false;
     }
 
-    /**
-     * Dispose all webviews
-     */
     disposeAll(): void {
         for (const managed of this.webviews.values()) {
             managed.panel.dispose();
@@ -148,10 +138,6 @@ export class WebviewManager {
         this.webviews.clear();
     }
 
-    /**
-     * Gets all registered webviews for external systems (like JavaFileWatcher)
-     * that need to send messages directly
-     */
     getAllWebviews(): vscode.Webview[] {
         return Array.from(this.webviews.values())
             .filter((m) => m.isReady)

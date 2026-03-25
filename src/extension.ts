@@ -6,15 +6,22 @@ import { FileParseStore } from "./state";
 import { JavaFileWatcher } from "./JavaFileWatcher";
 import { WebviewManager } from "./WebviewManager";
 import { initializeParser } from "./parser";
-import { parseAndStore, ensureInitialized } from './parser';
+import { parseAndStore } from './parser';
 import { minimatch } from 'minimatch';
+import { computeCityLayout } from './cityLayout';
+import { buildCityWebviewHtml } from './cityWebviewHtml';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
   console.log("CODESCAPE ACTIVATED");
   const store = new FileParseStore();
-  const webviewManager = new WebviewManager(context.extensionUri);
+  const webviewManager = new WebviewManager(context.extensionUri, async (message: unknown) => {
+    const msg = message as { type?: string; payload?: { className?: string } };
+    if (msg.type === 'OPEN_CLASS_SOURCE' && msg.payload?.className) {
+      await openClassSourceFromClassName(msg.payload.className, store);
+    }
+  });
   const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store, webviewManager));
   const javaWatcher = new JavaFileWatcher(store, webviewManager);
   await initializeParser();
@@ -24,7 +31,7 @@ export async function activate(context: vscode.ExtensionContext) {
   //console.log('Congratulations, your extension "codescape" is now active!');
 
   // sidebar view
-  const provider = new CodescapeViewProvider(context.extensionUri, webviewManager);
+  const provider = new CodescapeViewProvider(context.extensionUri, webviewManager, store);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
   );
@@ -39,7 +46,6 @@ export async function activate(context: vscode.ExtensionContext) {
     console.log('Created bottom panel webview');
   });
 
-  // Legacy create panel command (just create side panel)
   const create = vscode.commands.registerCommand('codescape.createPanel', () => {
     webviewManager.createWebview('side');
   });
@@ -54,10 +60,11 @@ export async function activate(context: vscode.ExtensionContext) {
     await parseAndStore(uri, store);
   }
 
-  // Send full state to webview manager after initial parse
+  const classes = store.snapshot().flatMap(e => e.entry.data ?? []);
   const fullState = {
-    classes: store.snapshot().flatMap(e => e.entry.data ?? []),
-    status: 'ready'
+    classes,
+    layout: computeCityLayout(classes),
+    status: classes.length > 0 ? 'ready' as const : 'empty' as const,
   };
   webviewManager.broadcastFullState(fullState);
 
@@ -136,10 +143,14 @@ async function openClassSourceFromClassName(className: string, store: FileParseS
   const snapshot = store.snapshot();
 
   for (const { uri, entry } of snapshot) {
-    if (entry.status !== 'parsed' || !entry.data) continue;
+    if (entry.status !== 'parsed' || !entry.data) {
+      continue;
+    }
 
     const match = entry.data.find(c => c.Classname === className);
-    if (!match) continue;
+    if (!match) {
+      continue;
+    }
 
     const fileUri = vscode.Uri.parse(uri);
 
@@ -302,10 +313,11 @@ async function workspaceScan(store: FileParseStore, webviewManager: WebviewManag
   console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
   vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
 
-  // Broadcast updated full state to all webviews
+  const scannedClasses = snap.flatMap(e => e.entry.data ?? []);
   const fullState = {
-    classes: snap.flatMap(e => e.entry.data ?? []),
-    status: successCount > 0 ? 'ready' : 'empty'
+    classes: scannedClasses,
+    layout: computeCityLayout(scannedClasses),
+    status: successCount > 0 && scannedClasses.length > 0 ? ('ready' as const) : ('empty' as const),
   };
   webviewManager.broadcastFullState(fullState);
 }
@@ -371,28 +383,15 @@ export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
   return excludeFiles.some((pattern) => minimatch(path, pattern));
 }
 
-// sidebar view
-class CodescapeViewProvider implements vscode.WebviewViewProvider {
-  //add WebviewManager to sidebar
-  constructor(private extensionUri: vscode.Uri, private webviewManager: WebviewManager) { }
-  resolveWebviewView(webviewView: vscode.WebviewView) {
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
-    };
-    webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
-    // Note: WebviewView is managed separately by VS Code, not by WebviewManager
-  }
-}
-
-// new canvas-based city visualization that renders an isometric grid and buildings from AST data
-function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
+function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): string {
   const rendererUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "src", "webview", "renderer.js"),
+    vscode.Uri.joinPath(extensionUri, 'src', 'webview', 'renderer.js'),
   );
   const umlUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "src", "webview", "uml.js"),
+    vscode.Uri.joinPath(extensionUri, 'src', 'webview', 'uml.js'),
   );
+  return buildCityWebviewHtml(rendererUri.toString(), umlUri.toString());
+}
 
   return `
     <!DOCTYPE html>
@@ -467,58 +466,19 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
         // run layout before rendering
         runAutoLayout();
 
-        //assign the colors before re-rendering
-        assignColors();
+  resolveWebviewView(webviewView: vscode.WebviewView): void {
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')],
+    };
+    webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
 
-        // re-render canvas
-        render();
+    webviewView.webview.onDidReceiveMessage(async (message: { type?: string; payload?: { className?: string } }) => {
+      if (message.type === 'READY') {
+        const last = this.webviewManager.getLastFullState();
+        if (last) {
+          webviewView.webview.postMessage({ type: 'FULL_STATE', payload: last });
         }
-
-        //will later integrate with arjuns logic?
-        function runAutoLayout() {
-
-        //clear previous layout
-        state.layout = {};
-
-        state.classes.forEach((cls, index) => {
-
-            //simple layout for now (grid-based)
-            const col = 3 + index * 2;
-            const row = 3 + index;
-
-            state.layout[cls.Classname] = {
-            col,
-            row
-            };
-        });
-    }
-
-        function assignColors() {
-        const newColorMap = {};
-        const usedColors = new Set();
-
-        //preserve existing colors
-        state.classes.forEach(cls => {
-          const existing = state.colors[cls.Classname];
-          if (existing) {
-            newColorMap[cls.Classname] = existing;
-            usedColors.add(existing);
-          }
-        });
-
-        //assign new colors
-        state.classes.forEach(cls => {
-        if (!newColorMap[cls.Classname]) {
-            const nextColor =
-              COLOR_PALETTE.find(c => !usedColors.has(c)) ||
-              COLOR_PALETTE[Object.keys(newColorMap).length % COLOR_PALETTE.length];
-
-            newColorMap[cls.Classname] = nextColor;
-            usedColors.add(nextColor);
-          }
-        });
-
-        state.colors = newColorMap;
       }
 
       function getCanvasCoordinates(event) {
@@ -700,151 +660,8 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
       if (inside) {
         return b;
       }
-    }
-    return null;
+    });
   }
-
-  function screenToWorld(clientX, clientY) {
-    const x = (clientX - canvas.width / 2) / zoomLevel + canvas.width / 2;
-    const y = (clientY - canvas.height / 2) / zoomLevel + canvas.height / 2;
-    return { x, y };
-  }
-
-  function drawLoadingMessage() {
-    ctx.fillStyle = "white";
-    ctx.font = "20px Arial";
-    ctx.fillText("Loading...", 50, 50);
-  }
-
-  function drawEmptyMessage() {
-    ctx.fillStyle = "white";
-    ctx.font = "20px Arial";
-    ctx.fillText("No classes detected.", 50, 50);
-  }
-
-  function drawErrorMessage() {
-  ctx.fillStyle = "red";
-  ctx.font = "20px Arial";
-  ctx.fillText("Error parsing files.", 50, 50);
-  }
-
-
-        // Listen for FULL_STATE (and legacy AST_DATA) from the extension
-        window.addEventListener('message', event => {
-          console.log('Message received:', event.data);
-          const msg = event.data;
-          if (msg.type === 'FULL_STATE' && msg.payload) {
-            fileData = msg.payload.files || [];
-            if (msg.payload.status === 'empty') {
-              // Frontend can show empty state; for now still call render()
-            }
-            if (msg.payload.errors && msg.payload.errors.length > 0) {
-              console.warn('Parse errors:', msg.payload.errors);
-            }
-            render();
-          } else if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
-            fileData = msg.payload.files;
-            render();
-          } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
-           //create default values because may not exist in payload
-            const { changed = [], related = [], removed = [] } = msg.payload;
-            console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
-            console.log('[PARTIAL_STATE] related:', related.map(c => c.Classname));
-            console.log('[PARTIAL_STATE] removed:', removed);
-            // TODO: update individual buildings instead of full re-render
-            if(changed.length){
-              updateState(changed);
-            }
-            if(related.length){
-              updateState(related);
-
-            }
-
-          }
-        });
-
-        window.addEventListener('resize', () => {
-          canvas.width = window.innerWidth;
-          canvas.height = window.innerHeight;
-          render();
-        });
-
-        canvas.addEventListener('wheel', (e) => {
-          e.preventDefault();
-          if (e.deltaY < 0) {
-            zoomLevel = Math.min(zoomLevel * 1.1, 3);
-          } else {
-            zoomLevel = Math.max(zoomLevel * 0.9, 0.3);
-          }
-          render();
-        });
-
-        // export button
-        const exportBtn = document.createElement('button');
-        exportBtn.textContent = 'Export PNG';
-        exportBtn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:100;padding:4px 8px;background:#598BAF;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
-        document.body.appendChild(exportBtn);
-
-        const exportHtmlBtn = document.createElement('button');
-        exportHtmlBtn.textContent = 'Export HTML';
-        exportHtmlBtn.style.cssText = 'position:fixed;top:35px;right:10px;z-index:100;padding:4px 8px;background:#8B5CF6;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
-        document.body.appendChild(exportHtmlBtn);
-
-        const exportJsonBtn = document.createElement('button');
-        exportJsonBtn.textContent = 'Export JSON';
-        exportJsonBtn.style.cssText = 'position:fixed;top:60px;right:10px;z-index:100;padding:4px 8px;background:#10B981;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
-        document.body.appendChild(exportJsonBtn);
-
-        exportBtn.addEventListener('click', () => {
-          // Re-render without zoom to get clean capture
-          const link = document.createElement('a');
-          link.download = 'codescape-city.png';
-          link.href = canvas.toDataURL('image/png');
-          link.click();
-        });
-
-        exportHtmlBtn.addEventListener('click', () => {
-          vscode.postMessage({
-            type: 'EXPORT_HTML',
-            payload: { fileData: fileData }
-          });
-        });
-
-        exportJsonBtn.addEventListener('click', () => {
-          vscode.postMessage({
-            type: 'EXPORT_JSON',
-            payload: {
-              fileData: fileData,
-              zoomLevel: zoomLevel,
-              tileSize: TILE_L
-            }
-          });
-        });
-
-        canvas.addEventListener('click', (e) => {
-          const world = screenToWorld(e.clientX, e.clientY);
-          const building = getBuildingAtPosition(world.x, world.y);
-          if (!building) {
-            return;
-          }
-
-          vscode.postMessage({
-            type: 'OPEN_CLASS_SOURCE',
-            payload: {
-              className: building.className
-            }
-          });
-        });
-
-        //initial render
-        render();
-
-        // Handshake: tell extension we are ready so it sends FULL_STATE (avoids dropped messages)
-        vscode.postMessage({ type: 'READY' });
-      </script>
-    </body>
-    </html>
-  `;
 }
 
 // This method is called when your extension is deactivated
