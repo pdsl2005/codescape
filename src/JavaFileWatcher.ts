@@ -45,7 +45,7 @@ export class JavaFileWatcher {
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
             store.remove(uri);
-            this.postIncrementalChange(this.buildPartialStatePayload([], removedNames, store));
+            this.postIncrementalChange({ removed: removedNames });
         });
     }
     private buildPartialStatePayload(
