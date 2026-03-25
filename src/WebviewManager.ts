@@ -140,9 +140,9 @@ export class WebviewManager {
 
 
     /**
-     * Dispose all webviews
+     * Dispose all webview panels (webview view, the one under explorer) is disposed when vscode is closed)
      */
-    disposeAll(): void {
+    disposePanels(): void {
         for (const id of this.webviews.keys()) {
           let managed = this.webviews.get(id);
           if(managed != null && 'dispose' in managed.container){

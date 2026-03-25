@@ -471,9 +471,6 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
     
         // Registry of rendered buildings for hit detection (hover/click).
         // Each entry is tracked in canvas/world coordinates before zoom.
-        //NOTE: THIS STOPS RENDER FROM RUNNING
-        //const buildingRegistry = [];
-
         //now only reads from state
         
         function render() {
