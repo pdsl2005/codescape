@@ -290,7 +290,7 @@ class CodescapeViewProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
     };
     webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
-    // Note: WebviewView is managed separately by VS Code, not by WebviewManager
+    // Register this WebviewView with WebviewManager so it participates in the shared messaging/management logic
     this.webviewManager.addWebview(webviewView);
   }
 }
