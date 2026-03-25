@@ -3,6 +3,7 @@
   "displayName": "codescape",
   "description": "Welcome to Codescapes, where you build cities from your code.",
   "version": "0.0.1",
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -14,8 +15,16 @@
   "contributes": {
     "commands": [
       {
-        "command": "codescape.helloWorld",
-        "title": "Codescape: Hello World"
+        "command": "codescape.createPanel",
+        "title": "Create Panel"
+      },
+      {
+        "command": "codescape.createSidePanel",
+        "title": "Codescape: Open in Side Panel"
+      },
+      {
+        "command": "codescape.createBottomPanel",
+        "title": "Codescape: Open in Bottom Panel"
       },
       {
         "command": "codescape.scan",
@@ -54,6 +63,7 @@
     "minimatch": "^10.1.2",
     "three": "^0.183.2",
     "tree-sitter-java": "^0.23.5",
+    "tree-sitter-python": "^0.25.0",
     "web-tree-sitter": "^0.26.5"
   }
 }

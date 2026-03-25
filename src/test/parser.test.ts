@@ -174,4 +174,86 @@ suite('Java Extractor Tests', () => {
     assert.ok(methodsVis.includes('privateStatic()'), 'Should include privateStatic()');
     assert.strictEqual(methodsVis.length, 6, 'Should have exactly 6 methods');
   });
+
+  test('extracts inner classes with parentClass reference', () => {
+    const source = loadFixture('InnerClasses.java');
+    const result = extractClasses(source);
+
+    // Should find outer class + 6 inner classes
+    assert.strictEqual(result.length, 7, 'Should extract 7 classes (1 outer + 6 inner)');
+
+    const outer = result.find(c => c.Classname === 'OuterClass');
+    assert.ok(outer, 'Should find OuterClass');
+    assert.strictEqual(outer.parentClass, undefined, 'Outer class should have no parent');
+    assert.deepStrictEqual(outer.innerClasses, [
+      'InstanceInnerClass',
+      'StaticNestedClass',
+      'PrivateInnerClass',
+      'ProtectedInnerClass',
+      'FinalInnerClass',
+      'AbstractInnerClass'
+    ], 'Outer class should list all inner classes');
+
+    const instanceInner = result.find(c => c.Classname === 'InstanceInnerClass');
+    assert.ok(instanceInner, 'Should find InstanceInnerClass');
+    assert.strictEqual(instanceInner.parentClass, 'OuterClass', 'Inner class should reference parent');
+    assert.strictEqual(instanceInner.isStatic, undefined, 'Non-static inner class should not have isStatic flag');
+
+    const staticNested = result.find(c => c.Classname === 'StaticNestedClass');
+    assert.ok(staticNested, 'Should find StaticNestedClass');
+    assert.strictEqual(staticNested.parentClass, 'OuterClass', 'Static nested should reference parent');
+    assert.strictEqual(staticNested.isStatic, true, 'Static nested should have isStatic flag');
+
+    const privateInner = result.find(c => c.Classname === 'PrivateInnerClass');
+    assert.ok(privateInner, 'Should find PrivateInnerClass');
+    assert.strictEqual(privateInner.Type, 'private', 'Private inner class should have private type');
+
+    const abstractInner = result.find(c => c.Classname === 'AbstractInnerClass');
+    assert.ok(abstractInner, 'Should find AbstractInnerClass');
+    assert.strictEqual(abstractInner.Type, 'abstract', 'Abstract inner class should have abstract type');
+  });
+
+  test('extracts deeply nested classes', () => {
+    const source = loadFixture('DeepNestedClasses.java');
+    const result = extractClasses(source);
+
+    // Outermost + FirstLevel + SecondLevel + ThirdLevel + FirstLevelStatic + OutermostStatic + NestedInStatic
+    assert.ok(result.length >= 7, 'Should extract deeply nested classes');
+
+    const outermost = result.find(c => c.Classname === 'Outermost');
+    assert.ok(outermost, 'Should find Outermost');
+
+    const firstLevel = result.find(c => c.Classname === 'FirstLevel');
+    assert.ok(firstLevel, 'Should find FirstLevel');
+    assert.strictEqual(firstLevel.parentClass, 'Outermost', 'FirstLevel parent should be Outermost');
+
+    const secondLevel = result.find(c => c.Classname === 'SecondLevel');
+    assert.ok(secondLevel, 'Should find SecondLevel');
+    assert.strictEqual(secondLevel.parentClass, 'FirstLevel', 'SecondLevel parent should be FirstLevel');
+
+    const thirdLevel = result.find(c => c.Classname === 'ThirdLevel');
+    assert.ok(thirdLevel, 'Should find ThirdLevel');
+    assert.strictEqual(thirdLevel.parentClass, 'SecondLevel', 'ThirdLevel parent should be SecondLevel');
+  });
+
+  test('extracts inner types in interfaces', () => {
+    const source = loadFixture('InterfaceWithInnerTypes.java');
+    const result = extractClasses(source);
+
+    // OuterInterface + NestedInterface + NestedClassInInterface + StaticNestedInterface + InnerImplementer
+    assert.ok(result.length >= 5, 'Should extract interface and inner types');
+
+    const outerInterface = result.find(c => c.Classname === 'OuterInterface');
+    assert.ok(outerInterface, 'Should find OuterInterface');
+    assert.strictEqual(outerInterface.Type, 'interface', 'OuterInterface should be interface type');
+
+    const nestedInterface = result.find(c => c.Classname === 'NestedInterface');
+    assert.ok(nestedInterface, 'Should find NestedInterface');
+    assert.strictEqual(nestedInterface.parentClass, 'OuterInterface', 'NestedInterface parent should be OuterInterface');
+    assert.strictEqual(nestedInterface.Type, 'interface', 'NestedInterface should be interface type');
+
+    const nestedClass = result.find(c => c.Classname === 'NestedClassInInterface');
+    assert.ok(nestedClass, 'Should find NestedClassInInterface');
+    assert.strictEqual(nestedClass.parentClass, 'OuterInterface', 'NestedClassInInterface parent should be OuterInterface');
+  });
 });
