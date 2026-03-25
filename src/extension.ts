@@ -6,8 +6,8 @@ import { FileParseStore } from "./state";
 import { JavaFileWatcher } from "./JavaFileWatcher";
 import { WebviewManager } from "./WebviewManager";
 import { initializeParser } from "./parser";
-import { parseAndStore, ensureInitialized } from './parser';
-import { minimatch } from 'minimatch';
+import { parseAndStore } from "./parser";
+import { minimatch } from "minimatch";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -24,26 +24,28 @@ export async function activate(context: vscode.ExtensionContext) {
   //console.log('Congratulations, your extension "codescape" is now active!');
 
   // sidebar view
-  const provider = new CodescapeViewProvider(context.extensionUri, webviewManager);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
-  );
+  const provider = new CodescapeViewProvider(
+  context.extensionUri,
+  webviewManager,
+);
 
-  // Register multi-view commands
-  const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
-    const panel = webviewManager.createPanel('side');
-    console.log('Created side panel webview');
-  });
+context.subscriptions.push(
+  vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
+);
 
-  const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
-    const panel = webviewManager.createPanel('bottom');
-    console.log('Created bottom panel webview');
-  });
+// multi panels
+const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
+  webviewManager.createWebview('side');
+});
 
-  // Legacy create panel command (just create side panel)
-  const create = vscode.commands.registerCommand('codescape.createPanel', () => {
-    webviewManager.createPanel('side');
-  });
+const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
+  webviewManager.createWebview('bottom');
+});
+
+// legacy command
+const create = vscode.commands.registerCommand('codescape.createPanel', () => {
+  webviewManager.createWebview('side');
+});
 
   // Parse all existing Java and Python files on startup
   const existingFiles = [
@@ -356,51 +358,47 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
         let hoveredBuilding = null;
 
         //state update function that also triggers a re-render
-        function updateState(newData) {
-        console.log("update state called with data: ", newData);
+        //function updateState(newData) {
+        //console.log("update state called with data: ", newData);
         // store new parsed class data
-        state.classes = newData;
+        //state.classes = newData;
 
         // determine UI state
-        if (!newData) {
+        //if (!newData) {
           // null or undefined, something went wrong
-          state.status = "error";
-        } else if (newData.length === 0) {
+          //state.status = "error";
+        //} else if (newData.length === 0) {
           // valid array but no classes
-          state.status = "empty";
-        } else {
+          //state.status = "empty";
+        //} else {
           // valid array with classes
-          state.status = "ready";
-        }
+          //state.status = "ready";
+        //}
 
         // run layout before rendering
-        runAutoLayout();
+        //runAutoLayout();
 
         //assign the colors before re-rendering
-        assignColors();
+        //assignColors();
 
         // re-render canvas
-        render();
-        }
+        //render();
+        //}
 
-        //will later integrate with arjuns logic?
-        function runAutoLayout() {
+        
+        //function runAutoLayout() {
+        //state.layout = {};
+        //const cols = Math.ceil(Math.sqrt(state.classes.length)); // grid width
+        //state.classes.forEach((cls, index) => {
+          //const col = index % cols;
+          //const row = Math.floor(index / cols);
 
-        //clear previous layout
-        state.layout = {};
-
-        state.classes.forEach((cls, index) => {
-
-            //simple layout for now (grid-based)
-            const col = 3 + index * 2;
-            const row = 3 + index;
-
-            state.layout[cls.Classname] = {
-            col,
-            row
-            };
-        });
-    }
+          //state.layout[cls.Classname] = {
+            //col: col + 3,
+            //row: row + 3
+          //};
+        //});
+      //}
 
         function assignColors() {
         const newColorMap = {};
@@ -430,8 +428,70 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
         state.colors = newColorMap;
       }
 
-      function getCanvasCoordinates(event) {
+        function patchState({ changed = [], related = [], removed = [] }) {
+        console.log("patchState called");
 
+        const nodes = buildNodesFromClasses(state.classes);
+        state.layout = computeLayout(nodes);
+
+        //remove deleted classes
+        state.classes = state.classes.filter(
+          cls => !removed.includes(cls.Classname)
+        );
+
+        //create a map for fast updates
+        const classMap = new Map(
+          state.classes.map(cls => [cls.Classname, cls])
+        );
+
+        //apply changed + related updates
+        [...changed, ...related].forEach(cls => {
+          classMap.set(cls.Classname, cls);
+        });
+
+        //convert back to array
+        state.classes = Array.from(classMap.values());
+
+        //update UI state
+        if (state.classes.length === 0) {
+          state.status = "empty";
+        } else {
+          state.status = "ready";
+        }
+
+        //runAutoLayout();
+        assignColors();
+        render();
+        
+      }
+
+      function buildNodesFromClasses(classes) {
+      const classNames = new Set(classes.map(c => c.Classname));
+
+        return classes.map(cls => {
+        const neighbors = [];
+
+        //extract dependencies from fields
+        if (cls.Fields) {
+          cls.Fields.forEach(field => {
+            const type = field.type;
+
+            //only include if it's another class in the project
+            if (classNames.has(type)) {
+              neighbors.push(type);
+            }
+          });
+        }
+
+        return {
+          id: cls.Classname,
+          name: cls.Classname,
+          neighbors
+        };
+      });
+    }
+
+      function getCanvasCoordinates(event) {
       const rect = canvas.getBoundingClientRect();
 
         return {
@@ -530,9 +590,18 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
           return;
         }
 
-      //ready state -> render buildings
-      buildingRegistry.length = 0;
-      state.classes.forEach((cls) => {
+      // ready state -> render buildings
+      const sortedClasses = [...state.classes].sort((a, b) => {
+      const posA = state.layout[a.Classname];
+      const posB = state.layout[b.Classname];
+
+      if (!posA || !posB) return 0;
+
+      // sort by depth (row + col)
+      return (posA.row + posA.col) - (posB.row + posB.col);
+    });
+
+    sortedClasses.forEach((cls) => {
 
         //get layout position for this class
         const position = state.layout[cls.Classname];
@@ -638,41 +707,78 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
   ctx.fillText("Error parsing files.", 50, 50);
   }
 
+  function computeLayout(nodes) {
+  const layout = {};
+  let row = 0;
+  const placed = new Set();
 
-        // Listen for FULL_STATE (and legacy AST_DATA) from the extension
-        window.addEventListener('message', event => {
-          console.log('Message received:', event.data);
-          const msg = event.data;
-          if (msg.type === 'FULL_STATE' && msg.payload) {
-            fileData = msg.payload.files || [];
-            if (msg.payload.status === 'empty') {
-              // Frontend can show empty state; for now still call render()
-            }
-            if (msg.payload.errors && msg.payload.errors.length > 0) {
-              console.warn('Parse errors:', msg.payload.errors);
-            }
-            render();
-          } else if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
-            fileData = msg.payload.files;
-            render();
-          } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
-           console.log("PARTIAL STATE CHANGE RECEIVE")
-           //create default values because may not exist in payload
-            const { changed = [], related = [], removed = [] } = msg.payload;
-            console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
-            console.log('[PARTIAL_STATE] related:', related.map(c => c.Classname));
-            console.log('[PARTIAL_STATE] removed:', removed);
-            // TODO: update individual buildings instead of full re-render
-            if(changed.length){
-              updateState(changed);
-            }
-            if(related.length){
-              updateState(related);
+  for (const node of nodes) {
+    if (!placed.has(node.id)) {
+      layout[node.id] = { col: 0, row };
+      placed.add(node.id);
 
-            }
+      let col = 1;
+      for (const neighbor of node.neighbors) {
+        if (!placed.has(neighbor)) {
+          layout[neighbor] = { col, row };
+          placed.add(neighbor);
+          col++;
+        }
+      }
+      row++;
+    }
+  }
 
-          }
-        });
+  return layout;
+}
+
+  // Listen for FULL_STATE (and legacy AST_DATA) from the extension
+  window.addEventListener('message', event => {
+  console.log('Message received:', event.data);
+  const msg = event.data;
+
+  if (msg.type === 'FULL_STATE' && msg.payload) {
+    console.log("CLASSES:", msg.payload.classes);
+    console.log('[FULL_STATE] received:', msg.payload);
+
+    state.classes = msg.payload.classes;
+
+    //build graph input
+    const nodes = buildNodesFromClasses(state.classes);
+
+    // run algorithm
+    state.layout = computeLayout(nodes);
+
+    assignColors();
+    render();
+
+    if (msg.payload.status === 'empty') {
+      console.log('Empty state');
+    }
+
+    if (msg.payload.errors && msg.payload.errors.length > 0) {
+      console.warn('Parse errors:', msg.payload.errors);
+    }
+
+    return; // stop here
+  }
+
+  else if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
+    console.log('[AST_DATA]');
+    // you probably don't need this anymore, but leaving safe
+    return;
+  }
+
+  else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
+    const { changed = [], related = [], removed = [] } = msg.payload;
+
+    console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
+    console.log('[PARTIAL_STATE] related:', related.map(c => c.Classname));
+    console.log('[PARTIAL_STATE] removed:', removed);
+
+    patchState(msg.payload);
+  }
+});
 
         window.addEventListener('resize', () => {
           canvas.width = window.innerWidth;
