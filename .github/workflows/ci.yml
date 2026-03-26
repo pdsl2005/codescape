@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths: 
+      - 'media/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'media/**'
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - name: Install extension deps
+        run: cd extension && npm install
+      - name: Compile extension
+        run: cd extension && npm run compile

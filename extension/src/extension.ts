@@ -35,16 +35,16 @@ context.subscriptions.push(
 
 // multi panels
 const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
-  webviewManager.createWebview('side');
+  webviewManager.createPanel('side');
 });
 
 const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
-  webviewManager.createWebview('bottom');
+  webviewManager.createPanel('bottom');
 });
 
 // legacy command
 const create = vscode.commands.registerCommand('codescape.createPanel', () => {
-  webviewManager.createWebview('side');
+  webviewManager.createPanel('side');
 });
 
   // Parse all existing Java and Python files on startup
