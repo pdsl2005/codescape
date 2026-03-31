@@ -305,6 +305,7 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
   const umlUri = webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, "src", "webview", "uml.js"),
   );
+  const layoutUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri,"src","webview","placer.js"));
 
   return `
     <!DOCTYPE html>
@@ -319,6 +320,7 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
       <canvas id="cityCanvas"></canvas>
       <script src="${rendererUri}"></script>
       <script src="${umlUri}"></script>
+      <script src="${layoutUri}"></script>
       <script>
         const vscode = acquireVsCodeApi();
         const canvas = document.getElementById('cityCanvas');
@@ -400,7 +402,7 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
         //});
       //}
 
-        function assignColors() {
+      function assignColors() {
         const newColorMap = {};
         const usedColors = new Set();
 
@@ -428,7 +430,7 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
         state.colors = newColorMap;
       }
 
-        function patchState({ changed = [], related = [], removed = [] }) {
+      function patchState({ changed = [], related = [], removed = [] }) {
         console.log("patchState called");
 
         const nodes = buildNodesFromClasses(state.classes);
@@ -548,26 +550,6 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
           ctx.translate(-canvas.width / 2, -canvas.height / 2);
 
           drawIsoGrid(ctx, 10, 10, TILE_L, offsetX, offsetY);
-          // if (fileData.length === 0) {
-          //   placeIsoBuilding(ctx, 3, 3, 3, '#598BAF', TILE_L, offsetX, offsetY);
-          //   placeIsoBuilding(ctx, 5, 5, 5, '#8B5CF6', TILE_L, offsetX, offsetY);
-          //   placeIsoBuilding(ctx, 7, 3, 2, '#10B981', TILE_L, offsetX, offsetY);
-          // } else {
-          //   // FULL_STATE: file has path + classes[]; height from class count and method count
-          //   fileData.forEach((file, i) => {
-          //     const classCount = file.classes ? file.classes.length : 0;
-          //     const methodCount = file.classes ? file.classes.reduce(function (n, c) { return n + (c.Methods ? c.Methods.length : 0); }, 0) : 0;
-          //     const floors = Math.max(1, classCount + methodCount);
-          //     const col = 3 + i * 2;
-          //     const row = 3 + i;
-          //     placeIsoBuilding(ctx, col, row, floors, '#598BAF', TILE_L, offsetX, offsetY);
-          //   });
-          // }
-          // drawUmlBox(ctx, 50, 50, {
-          //   name: 'App',
-          //   fields: ['count: int', 'name: String'],
-          //   methods: ['getName()', 'setName()', 'toString()', 'run()']
-          // });
 
         //loading state
         if (state.status === "loading") {
@@ -707,30 +689,30 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
   ctx.fillText("Error parsing files.", 50, 50);
   }
 
-  function computeLayout(nodes) {
-  const layout = {};
-  let row = 0;
-  const placed = new Set();
+//   function computeLayout(nodes) {
+//   const layout = {};
+//   let row = 0;
+//   const placed = new Set();
 
-  for (const node of nodes) {
-    if (!placed.has(node.id)) {
-      layout[node.id] = { col: 0, row };
-      placed.add(node.id);
+//   for (const node of nodes) {
+//     if (!placed.has(node.id)) {
+//       layout[node.id] = { col: 0, row };
+//       placed.add(node.id);
 
-      let col = 1;
-      for (const neighbor of node.neighbors) {
-        if (!placed.has(neighbor)) {
-          layout[neighbor] = { col, row };
-          placed.add(neighbor);
-          col++;
-        }
-      }
-      row++;
-    }
-  }
+//       let col = 1;
+//       for (const neighbor of node.neighbors) {
+//         if (!placed.has(neighbor)) {
+//           layout[neighbor] = { col, row };
+//           placed.add(neighbor);
+//           col++;
+//         }
+//       }
+//       row++;
+//     }
+//   }
 
-  return layout;
-}
+//   return layout;
+// }
 
   // Listen for FULL_STATE (and legacy AST_DATA) from the extension
   window.addEventListener('message', event => {
