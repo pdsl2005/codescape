@@ -9,8 +9,19 @@ export async function importUserRepos(githubToken: string, userId: string) {
     }
   })
 
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => '')
+    throw new Error(
+      `Failed to fetch GitHub repositories: ${response.status} ${response.statusText}` +
+        (errorBody ? ` - ${errorBody}` : '')
+    )
+  }
+
   const repos = await response.json()
 
+  if (!Array.isArray(repos)) {
+    throw new Error('Unexpected GitHub API response when listing repositories; expected an array.')
+  }
   // For each repo, check if .codescape file exists
   for (const repo of repos) {
     const codescapeResponse = await fetch(
