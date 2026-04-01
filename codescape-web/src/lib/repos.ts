@@ -37,9 +37,30 @@ export async function importUserRepos(githubToken: string, userId: string) {
     if (codescapeResponse.ok) {
       // .codescape exists — parse it and save to Supabase
       const fileData = await codescapeResponse.json()
-      const content = atob(fileData.content) // decode base64
-      const cityState = JSON.parse(content)
 
+      // Ensure we have a string `content` and strip whitespace/newlines before base64-decoding
+      const rawContent = typeof fileData?.content === 'string' ? fileData.content.replace(/\s+/g, '') : null
+      if (!rawContent) {
+        console.warn('Missing or invalid .codescape content for repo', repo.full_name)
+        continue
+      }
+
+      let cityState: unknown
+      try {
+        const decoded = atob(rawContent) // decode base64
+        const parsed = JSON.parse(decoded)
+
+        // Basic shape validation: must be a non-null object (and not an array)
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          console.warn('Invalid .codescape JSON shape for repo', repo.full_name)
+          continue
+        }
+
+        cityState = parsed
+      } catch (error) {
+        console.error('Failed to decode/parse .codescape file for repo', repo.full_name, error)
+        continue
+      }
       await supabase.from('linked_repos').upsert({
         user_id: userId,
         repo_owner: repo.owner.login,
