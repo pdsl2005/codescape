@@ -56,7 +56,7 @@ export class WebviewManager {
         const viewId = this.generateViewId();
         this.webviews.set(viewId, managedWebview);
 
-        if ('viewType' in container) {
+        if (!('viewColumn' in container)) {
             managedWebview.isReady = true;
             if (this.lastFullState) {
                 container.webview.postMessage({

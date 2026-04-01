@@ -127,7 +127,7 @@ export function buildCityWebviewHtml(rendererUri: string, umlUri: string): strin
             }
 
             if (!classes.length) {
-              state.status = payload.status === 'empty' ? 'empty' : 'empty';
+              state.status = 'empty';
             } else {
               state.status = 'ready';
             }
