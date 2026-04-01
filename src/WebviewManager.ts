@@ -35,7 +35,10 @@ export class WebviewManager {
             viewColumn,
             {
                 enableScripts: true,
-                localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')],
+                localResourceRoots: [
+                    vscode.Uri.joinPath(this.extensionUri, 'src', 'webview'),
+                    vscode.Uri.joinPath(this.extensionUri, 'out', 'webview'),
+                ],
                 retainContextWhenHidden: true,
             }
         );
