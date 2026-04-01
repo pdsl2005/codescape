@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ClassInfo } from './parser/javaExtractor';
-import {getWebviewContent} from './extension'
+import {getWebviewContent} from './extension';
 
 
 type ViewLocation = 'side' | 'bottom';
