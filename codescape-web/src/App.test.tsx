@@ -2,8 +2,13 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+jest.mock('@supabase/auth-helpers-react', () => ({
+  // Simulate a signed-out state by returning no user
+  useUser: () => null,
+}));
+
+test('renders sign in button when signed out', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  const signInButton = screen.getByRole('button', { name: /sign in/i });
+  expect(signInButton).toBeInTheDocument();
 });
