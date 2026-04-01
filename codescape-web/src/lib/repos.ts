@@ -61,16 +61,28 @@ export async function importUserRepos(githubToken: string, userId: string) {
         console.error('Failed to decode/parse .codescape file for repo', repo.full_name, error)
         continue
       }
-      await supabase.from('linked_repos').upsert({
-        user_id: userId,
-        repo_owner: repo.owner.login,
-        repo_name: repo.name,
-        is_public: !repo.private,
-        city_state: cityState,
-        last_synced_at: new Date().toISOString()
-      }, {
-        onConflict: 'user_id, repo_owner, repo_name'
-      })
+      const { error } = await supabase.from('linked_repos').upsert(
+        {
+          user_id: userId,
+          repo_owner: repo.owner.login,
+          repo_name: repo.name,
+          is_public: !repo.private,
+          city_state: cityState,
+          last_synced_at: new Date().toISOString()
+        },
+        {
+          onConflict: 'user_id, repo_owner, repo_name'
+        }
+      )
+
+      if (error) {
+        console.error('Failed to upsert linked_repos record', {
+          userId,
+          repoFullName: repo.full_name,
+          error
+        })
+        throw error
+      }
     }
   }
 }
