@@ -2,12 +2,13 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
 import * as path from "path";
-import { FileParseStore } from "./state";
-import { JavaFileWatcher } from "./JavaFileWatcher";
-import { WebviewManager, getWebviewContent } from "./WebviewManager";
-import { initializeParser } from "./parser";
-import { parseAndStore } from "./parser";
 import { minimatch } from "minimatch";
+import { JavaFileWatcher } from "./JavaFileWatcher";
+import { WebviewManager } from "./WebviewManager";
+import { initializeParser, parseAndStore } from "./parser";
+import { buildCityWebviewHtml } from "./cityWebviewHtml";
+import { computeCityLayout } from "./cityLayout";
+import { FileParseStore } from "./state";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -35,16 +36,16 @@ context.subscriptions.push(
 
 // multi panels
 const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
-  webviewManager.createPanel('side');
+  webviewManager.createWebview('side');
 });
 
 const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
-  webviewManager.createPanel('bottom');
+  webviewManager.createWebview('bottom');
 });
 
 // legacy command
 const create = vscode.commands.registerCommand('codescape.createPanel', () => {
-  webviewManager.createPanel('side');
+  webviewManager.createWebview('side');
 });
 
   // Parse all existing Java and Python files on startup
@@ -58,11 +59,12 @@ const create = vscode.commands.registerCommand('codescape.createPanel', () => {
   }
 
   // Send full state to webview manager after initial parse
-  const fullState = {
-    classes: store.snapshot().flatMap(e => e.entry.data ?? []),
-    status: 'ready'
-  };
-  webviewManager.broadcastFullState(fullState);
+  const classes = store.snapshot().flatMap((entry) => entry.entry.data ?? []);
+  webviewManager.broadcastFullState({
+    classes,
+    layout: computeCityLayout(classes),
+    status: classes.length > 0 ? "ready" : "empty",
+  });
 
   const dumpDisposable = vscode.commands.registerCommand(
     "codescape.dumpParseStore",
@@ -212,11 +214,12 @@ async function workspaceScan(store: FileParseStore, webviewManager: WebviewManag
   vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
 
   // Broadcast updated full state to all webviews
-  const fullState = {
-    classes: snap.flatMap(e => e.entry.data ?? []),
-    status: successCount > 0 ? 'ready' : 'empty'
-  };
-  webviewManager.broadcastFullState(fullState);
+  const scannedClasses = snap.flatMap((entry) => entry.entry.data ?? []);
+  webviewManager.broadcastFullState({
+    classes: scannedClasses,
+    layout: computeCityLayout(scannedClasses),
+    status: successCount > 0 && scannedClasses.length > 0 ? "ready" : "empty",
+  });
 }
 
 
@@ -275,6 +278,15 @@ export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
     .map((line) => line.trim())
     .filter((line) => line.trim() !== "");
   return excludeFiles.some((pattern) => minimatch(path, pattern));
+}
+function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+  const rendererUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, "src", "webview", "renderer.js")
+  );
+  const umlUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, "src", "webview", "uml.js")
+  );
+  return buildCityWebviewHtml(rendererUri.toString(), umlUri.toString());
 }
 
 // sidebar view
