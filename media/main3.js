@@ -8,11 +8,35 @@ import {
 } from "./renderer3.js";
 
 // example DTO list
-const sample_buildings = [
-  { col: 2, row: 3, floors: 4, color: "#3498db" },
-  { col: 5, row: 1, floors: 2, color: "#e74c3c" },
-  { col: 0, row: 9, floors: 10, color: "#ffffff"}
-];
+//const sample_buildings = [
+//  { col: 2, row: 3, floors: 4, color: "#3498db" },
+//  { col: 5, row: 1, floors: 2, color: "#e74c3c" },
+//  { col: 0, row: 9, floors: 10, color: "#ffffff"}
+//];
+
+function generateCity(size) {
+  const buildings = [];
+
+  for (let col = 0; col < size; col++) {
+    for (let row = 0; row < size; row++) {
+
+      // randomly decide if there's a building
+      if (Math.random() < 0.8) {
+        const floors = Math.floor(Math.random() * 10) + 1;
+
+        buildings.push({
+          col,
+          row,
+          floors
+        });
+      }
+    }
+  }
+
+  return buildings;
+}
+
+const sample_buildings = generateCity(10);
 
 // scene
 const scene = new THREE.Scene();
