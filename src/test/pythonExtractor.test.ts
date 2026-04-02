@@ -94,6 +94,18 @@ suite('Python Extractor Tests', () => {
     assert.ok(area.modifiers.some((d: string) => d.includes('abstractmethod')));
   });
 
+  test('extracts nested classes with parentClass and innerClasses', () => {
+    const source = loadFixture('NestedClasses.py');
+    const result = extractPythonEntities(source, 'NestedClasses');
+
+    const outer = result.find((r) => r.Classname === 'Outer');
+    const inner = result.find((r) => r.Classname === 'Inner');
+    assert.ok(outer, 'Outer should exist');
+    assert.ok(inner, 'Inner should exist');
+    assert.strictEqual(inner!.parentClass, 'Outer');
+    assert.deepStrictEqual(outer!.innerClasses, ['Inner']);
+  });
+
   test('extracts module-level entry with standalone functions and imports', () => {
     const source = loadFixture('ModuleLevel.py');
     const result = extractPythonEntities(source, 'ModuleLevel');
