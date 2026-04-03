@@ -33,8 +33,7 @@ export function buildCityWebviewHtml(umlUri: string, cityUri : string): string {
             if (msg.type === 'FULL_STATE' && msg.payload && msg.payload.classes) {
               city.applyFullPayload(msg.payload);
             } else if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
-              state.status = 'empty';
-              city.render();
+              city.applyFullPayload({ classes: [] });
             } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
               city.applyPartialPayload(msg.payload);
             }
