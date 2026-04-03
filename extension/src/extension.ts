@@ -280,13 +280,13 @@ export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
   return excludeFiles.some((pattern) => minimatch(path, pattern));
 }
 function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): string {
-  const rendererUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "src", "webview", "renderer.js")
-  );
   const umlUri = webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, "src", "webview", "uml.js")
   );
-  return buildCityWebviewHtml(rendererUri.toString(), umlUri.toString());
+  const cityUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, "src", "webview", "citystate.js")
+  )
+  return buildCityWebviewHtml(umlUri.toString(), cityUri.toString());
 }
 
 // sidebar view

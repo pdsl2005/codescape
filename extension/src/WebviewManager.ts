@@ -159,12 +159,12 @@ export class WebviewManager {
     }
 
     private getWebviewContent(webview: vscode.Webview): string {
-        const rendererUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this.extensionUri, 'src', 'webview', 'renderer.js')
-        );
         const umlUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.extensionUri, 'src', 'webview', 'uml.js')
         );
-        return buildCityWebviewHtml(rendererUri.toString(), umlUri.toString());
+        const cityUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this.extensionUri, 'src','webview','citystate.js')
+        )
+        return buildCityWebviewHtml(umlUri.toString(), cityUri.toString());
     }
 }
