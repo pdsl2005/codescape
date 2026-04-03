@@ -58,8 +58,8 @@ export function buildCityWebviewHtml(umlUri: string, cityUri : string): string {
 
 
           canvas.addEventListener('click', function (e) {
-            const world = screenToWorld(e.clientX, e.clientY);
-            const building = getBuildingAtPosition(world.x, world.y);
+            const world = city.screenToWorld(canvasX, canvasY);
+            const building = city.getBuildingAtPosition(world.x, world.y);
             if (!building) return;
             vscode.postMessage({
               type: 'OPEN_CLASS_SOURCE',
