@@ -1,6 +1,6 @@
 # Codescape
 
-Codescape is a VS Code extension that parses Java code and renders it as an isometric city.
+Codescape is a VS Code extension that parses Java and Python code and renders it as an isometric city.
 
 - Buildings represent classes/interfaces.
 - Height is based on methods + fields.
@@ -15,6 +15,7 @@ Active prototype with working parser, watcher, relationship graph, and canvas re
 | Area | Status | Notes |
 |---|---|---|
 | Java parsing (Tree-sitter) | Implemented | Classes/interfaces, methods, fields, constructors |
+| Python parsing (Tree-sitter) | Implemented | Classes, module nodes, methods, fields, inheritance |
 | Relationship graph | Implemented | Extends/implements/field/ctor dependencies |
 | Incremental updates | Implemented | Watcher emits `PARTIAL_STATE` |
 | Explorer webview | Implemented | `codescape.Cityview` |
@@ -42,6 +43,10 @@ npm run compile
 4. In the extension host window:
    - Open the explorer view `Codescape City`, or
    - Run command `Create Panel` (`codescape.createPanel`).
+
+Known-good example workspaces:
+- `examples/java-city`
+- `examples/python-city`
 
 ## Development
 

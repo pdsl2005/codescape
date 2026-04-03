@@ -1,5 +1,5 @@
 // Isometric grid rendering
-function drawIsoGrid(ctx, rows, cols, size, offsetX, offsetY) {
+export function drawIsoGrid(ctx, rows, cols, size, offsetX, offsetY) {
     ctx.strokeStyle = '#2c2c2c';
     var tileW = size;
     var tileH = size / 2;
@@ -92,7 +92,7 @@ function drawIsoBuilding(ctx, baseX, baseY, floors, size, color) {
 }
 
 // Place building on grid
-function placeIsoBuilding(ctx, col, row, floors, color, TILE_L, offsetX, offsetY) {
+export function placeIsoBuilding(ctx, col, row, floors, color, TILE_L, offsetX, offsetY) {
     var isoX = (col - row) * TILE_L / 2 + offsetX;
     var isoY = (col + row) * TILE_L / 4 + offsetY;
     drawIsoBuilding(ctx, isoX, isoY + TILE_L / 2, floors, TILE_L, color || '#598BAF');
