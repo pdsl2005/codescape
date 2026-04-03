@@ -14,6 +14,10 @@ function loadExampleEntities(exampleFolder: string): ClassInfo[] {
   const entities: ClassInfo[] = [];
 
   for (const fileName of fileNames) {
+    if (!fileName.endsWith('.java') && !fileName.endsWith('.py')) {
+      continue;
+    }
+
     const fullPath = path.join(folder, fileName);
     const source = fs.readFileSync(fullPath, 'utf8');
 

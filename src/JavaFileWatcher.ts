@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { FileParseStore } from './state';
 import { isExcluded } from './extension';
-import { parseAndStore } from './parser';
+import { deleteParseResultsJson, parseAndStore } from './parser';
 import { ClassInfo } from './parser/javaExtractor';
 import { buildGraph, getRelated } from './relations';
 import { WebviewManager } from './WebviewManager';
@@ -24,6 +24,7 @@ export class JavaFileWatcher {
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
             store.remove(uri);
+            void deleteParseResultsJson(uri);
             this.postIncrementalChange(this.buildPartialStatePayload([], removedNames, store));
         });
 
@@ -45,6 +46,7 @@ export class JavaFileWatcher {
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
             store.remove(uri);
+            void deleteParseResultsJson(uri);
             this.postIncrementalChange(this.buildPartialStatePayload([], removedNames, store));
         });
     }

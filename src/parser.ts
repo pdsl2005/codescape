@@ -37,26 +37,75 @@ export async function parsePythonFile(uri: vscode.Uri): Promise<ClassInfo[]> {
   return extractPythonEntities(text, moduleName);
 }
 
+function getWorkspaceFolderForUri(uri: vscode.Uri): vscode.WorkspaceFolder {
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+  if (!workspaceFolder) {
+    throw new Error(`No workspace folder found for ${uri.fsPath}`);
+  }
+  return workspaceFolder;
+}
+
+export function getJsonExportUriForSource(uri: vscode.Uri): vscode.Uri {
+  const workspaceFolder = getWorkspaceFolderForUri(uri);
+  const relativeSourcePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath);
+  const parsedPath = path.parse(relativeSourcePath);
+  const jsonFilePath = path.join(
+    workspaceFolder.uri.fsPath,
+    'codescape-json',
+    parsedPath.dir,
+    `${parsedPath.name}.json`
+  );
+  return vscode.Uri.file(jsonFilePath);
+}
+
 /**
- * Export parsed ClassInfo data to a JSON file next to the source file.
- * For example: Test.java → Test.json, script.py -> script.json
+ * Export parsed ClassInfo data under a dedicated generated tree.
+ * For example: src/foo/Test.java -> codescape-json/src/foo/Test.json
  */
 async function exportParseResultsAsJson(uri: vscode.Uri, classInfo: ClassInfo[]): Promise<void> {
   try {
     const sourceFilePath = uri.fsPath;
-    const parsedPath = path.parse(sourceFilePath);
-    const jsonFilePath = path.join(parsedPath.dir, `${parsedPath.name}.json`);
-    const jsonUri = vscode.Uri.file(jsonFilePath);
+    const jsonUri = getJsonExportUriForSource(uri);
+    const jsonDirPath = path.dirname(jsonUri.fsPath);
     const jsonContent = JSON.stringify({
       sourceFile: path.basename(sourceFilePath),
       parsedAt: new Date().toISOString(),
       classes: classInfo
     }, null, 2);
     const encoder = new TextEncoder();
+
+    await vscode.workspace.fs.createDirectory(vscode.Uri.file(jsonDirPath));
     await vscode.workspace.fs.writeFile(jsonUri, encoder.encode(jsonContent));
-    console.log(`Exported parse results to ${jsonFilePath}`);
+    console.log(`Exported parse results to ${jsonUri.fsPath}`);
   } catch (err) {
     console.error('Failed to export parse results as JSON:', err);
+  }
+}
+
+export async function deleteParseResultsJson(uri: vscode.Uri): Promise<void> {
+  try {
+    const workspaceFolder = getWorkspaceFolderForUri(uri);
+    const jsonUri = getJsonExportUriForSource(uri);
+    await vscode.workspace.fs.delete(jsonUri, { recursive: false, useTrash: false });
+    console.log(`Deleted parse results JSON ${jsonUri.fsPath}`);
+
+    const stopDir = path.join(workspaceFolder.uri.fsPath, 'codescape-json');
+    let currentDir = path.dirname(jsonUri.fsPath);
+
+    while (currentDir.startsWith(stopDir) && currentDir !== stopDir) {
+      try {
+        const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(currentDir));
+        if (entries.length > 0) {
+          break;
+        }
+        await vscode.workspace.fs.delete(vscode.Uri.file(currentDir), { recursive: false, useTrash: false });
+        currentDir = path.dirname(currentDir);
+      } catch {
+        break;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to delete parse results JSON:', err);
   }
 }
 
