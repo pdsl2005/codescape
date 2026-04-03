@@ -3,12 +3,14 @@ name: CI
 on:
   push:
     branches: [main]
-    paths: 
+    paths:
       - 'media/**'
+      - 'extension/**'
   pull_request:
     branches: [main]
     paths:
       - 'media/**'
+      - 'extension/**'
 
 jobs:
   extension:
