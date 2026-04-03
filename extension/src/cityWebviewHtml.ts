@@ -15,7 +15,6 @@ export function buildCityWebviewHtml(umlUri: string, cityUri : string): string {
       <body>
         <canvas id="cityCanvas"></canvas>
         <script src="${umlUri}"></script>
-        <script type="module" src="${cityUri}"></script>
         <script type= "module">
           import {CityState} from "${cityUri}"
           const vscode = acquireVsCodeApi();
@@ -57,7 +56,7 @@ export function buildCityWebviewHtml(umlUri: string, cityUri : string): string {
 
 
           canvas.addEventListener('click', function (e) {
-            const world = city.screenToWorld(canvasX, canvasY);
+            const world = city.screenToWorld(e.clientX, e.clientY);
             const building = city.getBuildingAtPosition(world.x, world.y);
             if (!building) return;
             vscode.postMessage({
