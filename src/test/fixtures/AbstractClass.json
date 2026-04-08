@@ -1,0 +1,67 @@
+{
+  "sourceFile": "AbstractClass.py",
+  "parsedAt": "2026-04-08T21:15:27.015Z",
+  "classes": [
+    {
+      "Classname": "Shape",
+      "Methods": [
+        {
+          "name": "area",
+          "parameters": [],
+          "returnType": "float",
+          "modifiers": [
+            "abstractmethod"
+          ]
+        },
+        {
+          "name": "perimeter",
+          "parameters": [],
+          "returnType": "float",
+          "modifiers": [
+            "abstractmethod"
+          ]
+        },
+        {
+          "name": "describe",
+          "parameters": [],
+          "returnType": "str",
+          "modifiers": []
+        }
+      ],
+      "Loc": 14,
+      "Type": "abstract",
+      "Extends": "ABC",
+      "Implements": [],
+      "Fields": [
+        {
+          "name": "color",
+          "type": "unknown",
+          "modifiers": []
+        }
+      ],
+      "Constructors": [
+        {
+          "parameters": [
+            {
+              "name": "color",
+              "type": "str"
+            }
+          ],
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "Classname": "<AbstractClass>",
+      "Methods": [],
+      "Loc": 18,
+      "Type": "module",
+      "Extends": null,
+      "Implements": [
+        "abc"
+      ],
+      "Fields": [],
+      "Constructors": []
+    }
+  ]
+}

@@ -1,43 +1,59 @@
 {
-  "sourceFile": "SimpleClass.java",
-  "parsedAt": "2026-04-01T22:22:02.129Z",
+  "sourceFile": "SimpleClass.py",
+  "parsedAt": "2026-04-08T21:15:27.011Z",
   "classes": [
     {
-      "Classname": "SimpleClass",
+      "Classname": "Dog",
       "Methods": [
         {
-          "name": "setName",
-          "parameters": [
-            "String"
-          ],
-          "returnType": "void",
-          "modifiers": [
-            "public"
-          ]
+          "name": "speak",
+          "parameters": [],
+          "returnType": "str",
+          "modifiers": []
         },
         {
-          "name": "getName",
+          "name": "get_age",
           "parameters": [],
-          "returnType": "String",
-          "modifiers": [
-            "public"
-          ]
+          "returnType": "int",
+          "modifiers": []
         }
       ],
-      "Loc": 11,
-      "Type": "public",
+      "Loc": 12,
+      "Type": "class",
       "Extends": null,
       "Implements": [],
       "Fields": [
         {
+          "name": "species",
+          "type": "str",
+          "modifiers": []
+        },
+        {
           "name": "name",
-          "type": "String",
-          "modifiers": [
-            "private"
-          ]
+          "type": "unknown",
+          "modifiers": []
+        },
+        {
+          "name": "age",
+          "type": "unknown",
+          "modifiers": []
         }
       ],
-      "Constructors": []
+      "Constructors": [
+        {
+          "parameters": [
+            {
+              "name": "name",
+              "type": "str"
+            },
+            {
+              "name": "age",
+              "type": "int"
+            }
+          ],
+          "modifiers": []
+        }
+      ]
     }
   ]
 }
