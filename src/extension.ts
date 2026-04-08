@@ -6,8 +6,8 @@ import { FileParseStore } from "./state";
 import { JavaFileWatcher } from "./JavaFileWatcher";
 import { WebviewManager } from "./WebviewManager";
 import { initializeParser } from "./parser";
-import { parseAndStore, ensureInitialized } from './parser';
-import { minimatch } from 'minimatch';
+import { parseAndStore } from "./parser";
+import { minimatch } from "minimatch";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -24,25 +24,28 @@ export async function activate(context: vscode.ExtensionContext) {
   //console.log('Congratulations, your extension "codescape" is now active!');
 
   // sidebar view
-  const provider = new CodescapeViewProvider(context.extensionUri, webviewManager);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
-  );
-  // Register multi-view commands
-  const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
-    const panel = webviewManager.createWebview('side');
-    console.log('Created side panel webview');
-  });
+  const provider = new CodescapeViewProvider(
+  context.extensionUri,
+  webviewManager,
+);
 
-  const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
-    const panel = webviewManager.createWebview('bottom');
-    console.log('Created bottom panel webview');
-  });
+context.subscriptions.push(
+  vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
+);
 
-  // Legacy create panel command (just create side panel)
-  const create = vscode.commands.registerCommand('codescape.createPanel', () => {
-    webviewManager.createWebview('side');
-  });
+// multi panels
+const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
+  webviewManager.createPanel('side');
+});
+
+const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
+  webviewManager.createPanel('bottom');
+});
+
+// legacy command
+const create = vscode.commands.registerCommand('codescape.createPanel', () => {
+  webviewManager.createPanel('side');
+});
 
   // Parse all existing Java and Python files on startup
   const existingFiles = [
@@ -180,100 +183,6 @@ async function openClassSourceFromClassName(className: string, store: FileParseS
   vscode.window.showInformationMessage(`Could not find source for class ${className}.`);
 }
 
-function createPanel(context : vscode.ExtensionContext, store: FileParseStore){
-    
-  const panel = vscode.window.createWebviewPanel(
-    // internal ID
-    "codescapeWebview",
-    // title shown to user
-    "Codescape",
-    vscode.ViewColumn.One,
-    {
-      // lets the webview run JavaScript
-      enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(context.extensionUri, "src", "webview"),
-      ],
-    },
-  );
-
-  // html content for the web viewer
-  panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
-  //listen for messages FROM the webview
-  panel.webview.onDidReceiveMessage(async (message: any) => {
-    console.log('Received from webview:', message);
-    if (message.type === 'EXPORT_HTML') {
-      const htmlContent = generateStandaloneHtml(message.payload.fileData);
-      const uri = await vscode.window.showSaveDialog({
-        filters: { 'HTML': ['html'] },
-        defaultUri: vscode.Uri.file('codescape-city.html')
-      });
-      if (uri) {
-        await vscode.workspace.fs.writeFile(uri, Buffer.from(htmlContent));
-        vscode.window.showInformationMessage('City exported as HTML!');
-      }
-    }
-    if (message.type === 'OPEN_CLASS_SOURCE' && message.payload?.className) {
-      await openClassSourceFromClassName(message.payload.className, store);
-    }
-    if (message.type === 'EXPORT_JSON') {
-      const uri = await vscode.window.showSaveDialog({
-        filters: { 'JSON': ['json'] },
-        defaultUri: vscode.Uri.file('codescape-city.json')
-      });
-      if (uri) {
-        await vscode.workspace.fs.writeFile(
-          uri,
-          Buffer.from(JSON.stringify(message.payload, null, 2))
-        );
-        vscode.window.showInformationMessage('City state exported as JSON!');
-      }
-    }
-  });
-
-  function generateStandaloneHtml(fileData: any[]): string {
-    // Read the JS files and inline them
-    return `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <title>Codescape City</title>
-        <style>
-          body { margin: 0; overflow: hidden; background: #1a1a2e; }
-          canvas { display: block; }
-        </style>
-      </head>
-      <body>
-        <canvas id="cityCanvas"></canvas>
-        <script>
-          // Inline renderer.js content here
-          // Inline uml.js content here
-          // Inline the setup script with fileData baked in
-          const fileData = ${JSON.stringify(fileData)};
-          // ... rest of render logic
-        </script>
-      </body>
-      </html>
-    `;
-  }
-
-  //send mock data TO the webview (Change this to run a full state change)
-  panel.webview.postMessage({
-    type: "AST_DATA",
-    payload: {
-      files: [
-        {
-          name: "App.tsx",
-          lines: 120,
-          functions: 4,
-          classes: 2,
-        },
-      ],
-    },
-  });
-  panel.onDidDispose(() => { });
-}
-
 async function workspaceScan(store: FileParseStore, webviewManager: WebviewManager) {
   // Get all supported source files not in exclude
   const files = [
@@ -376,22 +285,25 @@ class CodescapeViewProvider implements vscode.WebviewViewProvider {
   //add WebviewManager to sidebar
   constructor(private extensionUri: vscode.Uri, private webviewManager: WebviewManager) { }
   resolveWebviewView(webviewView: vscode.WebviewView) {
+    console.log('resolveWebviewView called, view id:', webviewView.viewType);
+
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'src', 'webview')]
+      localResourceRoots: [
+        vscode.Uri.joinPath(this.extensionUri, 'src', 'webview'),
+        vscode.Uri.joinPath(this.extensionUri, 'out', 'webview'),
+      ]
     };
     webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
-    // Note: WebviewView is managed separately by VS Code, not by WebviewManager
+    // Register this WebviewView with WebviewManager so it participates in the shared messaging/management logic
+    this.webviewManager.addWebview(webviewView);
   }
 }
 
 // new canvas-based city visualization that renders an isometric grid and buildings from AST data
-function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
-  const rendererUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "src", "webview", "renderer.js"),
-  );
-  const umlUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "src", "webview", "uml.js"),
+export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
+  const bundleUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, "out", "webview", "webviewBundle.js"),
   );
 
   return `
@@ -400,447 +312,14 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
     <head>
       <style>
         body { margin: 0; overflow: hidden; }
-        canvas { background: #1a1a2e; display: block; }
+        #city-container { width: 100vw; height: 100vh; }
       </style>
     </head>
     <body>
-      <canvas id="cityCanvas"></canvas>
-      <script src="${rendererUri}"></script>
-      <script src="${umlUri}"></script>
+      <div id="city-container"></div>
+      <script src="${bundleUri}"></script>
       <script>
-        const vscode = acquireVsCodeApi();
-        const canvas = document.getElementById('cityCanvas');
-        const ctx = canvas.getContext('2d');
-
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-
-        const TILE_L = 50;
-        const offsetX = canvas.width / 2;
-        const offsetY = 100;
-        let zoomLevel = 1;
-
-        const COLOR_PALETTE = [
-  "#598BAF",
-  "#8B5CF6",
-  "#10B981",
-  "#F59E0B",
-  "#EF4444",
-  "#14B8A6",
-  "#6366F1",
-  "#EC4899"
-];
-
-        //this replaces fileData, single source of truth for frontend
-        let state = {
-        // ClassInfo[]
-        classes: [],   
-        // { className: { col, row } }  
-        layout: {},   
-        //stores colors
-        colors: {}, 
-        // loading | ready | empty | error
-        status: "loading" 
-        };
-
-        let buildingRegistry = [];
-        let hoveredBuilding = null;
-
-        //state update function that also triggers a re-render
-        function updateState(newData) {
-        console.log("update state called with data: ", newData);
-        // store new parsed class data
-        state.classes = newData;
-
-        // determine UI state
-        if (!newData) {
-          // null or undefined, something went wrong
-          state.status = "error";
-        } else if (newData.length === 0) {
-          // valid array but no classes
-          state.status = "empty";
-        } else {
-          // valid array with classes
-          state.status = "ready";
-        }
-
-        // run layout before rendering
-        runAutoLayout();
-
-        //assign the colors before re-rendering
-        assignColors();
-
-        // re-render canvas
-        render();
-        }
-
-        //will later integrate with arjuns logic?
-        function runAutoLayout() {
-
-        //clear previous layout
-        state.layout = {};
-
-        state.classes.forEach((cls, index) => {
-
-            //simple layout for now (grid-based)
-            const col = 3 + index * 2;
-            const row = 3 + index;
-
-            state.layout[cls.Classname] = {
-            col,
-            row
-            };
-        });
-    }
-
-        function assignColors() {
-        const newColorMap = {};
-        const usedColors = new Set();
-
-        //preserve existing colors
-        state.classes.forEach(cls => {
-          const existing = state.colors[cls.Classname];
-          if (existing) {
-            newColorMap[cls.Classname] = existing;
-            usedColors.add(existing);
-          }
-        });
-
-        //assign new colors
-        state.classes.forEach(cls => {
-        if (!newColorMap[cls.Classname]) {
-            const nextColor =
-              COLOR_PALETTE.find(c => !usedColors.has(c)) ||
-              COLOR_PALETTE[Object.keys(newColorMap).length % COLOR_PALETTE.length];
-
-            newColorMap[cls.Classname] = nextColor;
-            usedColors.add(nextColor);
-          }
-        });
-
-        state.colors = newColorMap;
-      }
-
-      function getCanvasCoordinates(event) {
-
-      const rect = canvas.getBoundingClientRect();
-
-        return {
-          x: event.clientX - rect.left,
-          y: event.clientY - rect.top
-        };
-      }
-
-      function getBuildingAtPosition(canvasX, canvasY) {
-        for (let i = buildingRegistry.length - 1; i >= 0; i--) {
-          const b = buildingRegistry[i];
-      
-          const inside =
-            canvasX >= b.x &&
-            canvasX <= b.x + b.width &&
-            canvasY >= b.y &&
-            canvasY <= b.y + b.height;
-
-          if (inside) {
-            return b;
-          }
-        }
-
-        return null;
-      }
-
-      canvas.addEventListener("mousemove", (event) => {
-
-        const { x, y } = getCanvasCoordinates(event);
-        const building = getBuildingAtPosition(x, y);
-        
-        if (hoveredBuilding !== building) {
-          hoveredBuilding = building;
-          render();
-        }
-      });
-    
-        // Registry of rendered buildings for hit detection (hover/click).
-        // Each entry is tracked in canvas/world coordinates before zoom.
-        const buildingRegistry = [];
-
-        //now only reads from state
-        
-        function render() {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-          // reset each frame
-          buildingRegistry = [];
-
-          ctx.save();
-          ctx.translate(canvas.width / 2, canvas.height / 2);
-          ctx.scale(zoomLevel, zoomLevel);
-          ctx.translate(-canvas.width / 2, -canvas.height / 2);
-
-          drawIsoGrid(ctx, 10, 10, TILE_L, offsetX, offsetY);
-          // if (fileData.length === 0) {
-          //   placeIsoBuilding(ctx, 3, 3, 3, '#598BAF', TILE_L, offsetX, offsetY);
-          //   placeIsoBuilding(ctx, 5, 5, 5, '#8B5CF6', TILE_L, offsetX, offsetY);
-          //   placeIsoBuilding(ctx, 7, 3, 2, '#10B981', TILE_L, offsetX, offsetY);
-          // } else {
-          //   // FULL_STATE: file has path + classes[]; height from class count and method count
-          //   fileData.forEach((file, i) => {
-          //     const classCount = file.classes ? file.classes.length : 0;
-          //     const methodCount = file.classes ? file.classes.reduce(function (n, c) { return n + (c.Methods ? c.Methods.length : 0); }, 0) : 0;
-          //     const floors = Math.max(1, classCount + methodCount);
-          //     const col = 3 + i * 2;
-          //     const row = 3 + i;
-          //     placeIsoBuilding(ctx, col, row, floors, '#598BAF', TILE_L, offsetX, offsetY);
-          //   });
-          // }
-          // drawUmlBox(ctx, 50, 50, {
-          //   name: 'App',
-          //   fields: ['count: int', 'name: String'],
-          //   methods: ['getName()', 'setName()', 'toString()', 'run()']
-          // });
-
-        //loading state
-        if (state.status === "loading") {
-          drawLoadingMessage();
-          ctx.restore();
-          return;
-        }
-
-        //empty state (no classes detected)
-        if (state.status === "empty") {
-          drawEmptyMessage();
-          ctx.restore();
-          return;
-        }
-
-        //error state
-        if (state.status === "error") {
-          drawErrorMessage();
-          ctx.restore();
-          return;
-        }
-
-      //ready state -> render buildings
-      buildingRegistry.length = 0;
-      state.classes.forEach((cls) => {
-
-        //get layout position for this class
-        const position = state.layout[cls.Classname];
-        if (!position) return;
-
-        //building height based on number of methods + fields
-        const floors = Math.max(
-          1,
-          (cls.Methods?.length || 0) +
-          (cls.Fields?.length || 0)
-        );
-
-        // Approximate building footprint in canvas/world space for hit detection.
-        const col = position.col;
-        const row = position.row;
-        const isoX = (col - row) * TILE_L / 2 + offsetX;
-        const isoY = (col + row) * TILE_L / 4 + offsetY + TILE_L / 2;
-        const approxHeight = TILE_L + floors * (TILE_L / 2);
-        const bbox = {
-          x: isoX - TILE_L / 2,
-          y: isoY - approxHeight,
-          width: TILE_L,
-          height: approxHeight
-        };
-
-        buildingRegistry.push({
-          className: cls.Classname,
-          x: bbox.x,
-          y: bbox.y,
-          width: bbox.width,
-          height: bbox.height
-        });
-
-        //place building using computed layout
-        placeIsoBuilding(
-          ctx,
-          col,
-          row,
-          floors,
-          state.colors[cls.Classname] || "#598BAF",
-          TILE_L,
-          offsetX,
-          offsetY
-        );
-      });
-
-      if (cls) {
-
-        drawUmlBox(
-          ctx,
-          hoveredBuilding.x + hoveredBuilding.width + 10,
-          hoveredBuilding.y,
-          {
-            name: cls.Classname,
-            fields: cls.Fields?.map(f => f.name) || [],
-            methods: cls.Methods?.map(m => m.name) || []
-          }
-        );
-      }
-    }
-      // restore canvas transform
-      ctx.restore();
-    }
-
-  function getBuildingAtPosition(canvasX, canvasY) {
-    for (let i = buildingRegistry.length - 1; i >= 0; i--) {
-      const b = buildingRegistry[i];
-
-      const inside =
-        canvasX >= b.x &&
-        canvasX <= b.x + b.width &&
-        canvasY >= b.y &&
-        canvasY <= b.y + b.height;
-
-      if (inside) {
-        return b;
-      }
-    }
-    return null;
-  }
-
-  function screenToWorld(clientX, clientY) {
-    const x = (clientX - canvas.width / 2) / zoomLevel + canvas.width / 2;
-    const y = (clientY - canvas.height / 2) / zoomLevel + canvas.height / 2;
-    return { x, y };
-  }
-
-  function drawLoadingMessage() {
-    ctx.fillStyle = "white";
-    ctx.font = "20px Arial";
-    ctx.fillText("Loading...", 50, 50);
-  }
-
-  function drawEmptyMessage() {
-    ctx.fillStyle = "white";
-    ctx.font = "20px Arial";
-    ctx.fillText("No classes detected.", 50, 50);
-  }
-
-  function drawErrorMessage() {
-  ctx.fillStyle = "red";
-  ctx.font = "20px Arial";
-  ctx.fillText("Error parsing files.", 50, 50);
-  }
-
-
-        // Listen for FULL_STATE (and legacy AST_DATA) from the extension
-        window.addEventListener('message', event => {
-          console.log('Message received:', event.data);
-          const msg = event.data;
-          if (msg.type === 'FULL_STATE' && msg.payload) {
-            fileData = msg.payload.files || [];
-            if (msg.payload.status === 'empty') {
-              // Frontend can show empty state; for now still call render()
-            }
-            if (msg.payload.errors && msg.payload.errors.length > 0) {
-              console.warn('Parse errors:', msg.payload.errors);
-            }
-            render();
-          } else if (msg.type === 'AST_DATA' && msg.payload && msg.payload.files) {
-            fileData = msg.payload.files;
-            render();
-          } else if (msg.type === 'PARTIAL_STATE' && msg.payload) {
-           //create default values because may not exist in payload
-            const { changed = [], related = [], removed = [] } = msg.payload;
-            console.log('[PARTIAL_STATE] changed:', changed.map(c => c.Classname));
-            console.log('[PARTIAL_STATE] related:', related.map(c => c.Classname));
-            console.log('[PARTIAL_STATE] removed:', removed);
-            // TODO: update individual buildings instead of full re-render
-            if(changed.length){
-              updateState(changed);
-            }
-            if(related.length){
-              updateState(related);
-
-            }
-
-          }
-        });
-
-        window.addEventListener('resize', () => {
-          canvas.width = window.innerWidth;
-          canvas.height = window.innerHeight;
-          render();
-        });
-
-        canvas.addEventListener('wheel', (e) => {
-          e.preventDefault();
-          if (e.deltaY < 0) {
-            zoomLevel = Math.min(zoomLevel * 1.1, 3);
-          } else {
-            zoomLevel = Math.max(zoomLevel * 0.9, 0.3);
-          }
-          render();
-        });
-
-        // export button
-        const exportBtn = document.createElement('button');
-        exportBtn.textContent = 'Export PNG';
-        exportBtn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:100;padding:4px 8px;background:#598BAF;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
-        document.body.appendChild(exportBtn);
-
-        const exportHtmlBtn = document.createElement('button');
-        exportHtmlBtn.textContent = 'Export HTML';
-        exportHtmlBtn.style.cssText = 'position:fixed;top:35px;right:10px;z-index:100;padding:4px 8px;background:#8B5CF6;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
-        document.body.appendChild(exportHtmlBtn);
-
-        const exportJsonBtn = document.createElement('button');
-        exportJsonBtn.textContent = 'Export JSON';
-        exportJsonBtn.style.cssText = 'position:fixed;top:60px;right:10px;z-index:100;padding:4px 8px;background:#10B981;color:white;border:none;border-radius:4px;cursor:pointer;font-family:monospace;';
-        document.body.appendChild(exportJsonBtn);
-
-        exportBtn.addEventListener('click', () => {
-          // Re-render without zoom to get clean capture
-          const link = document.createElement('a');
-          link.download = 'codescape-city.png';
-          link.href = canvas.toDataURL('image/png');
-          link.click();
-        });
-
-        exportHtmlBtn.addEventListener('click', () => {
-          vscode.postMessage({
-            type: 'EXPORT_HTML',
-            payload: { fileData: fileData }
-          });
-        });
-
-        exportJsonBtn.addEventListener('click', () => {
-          vscode.postMessage({
-            type: 'EXPORT_JSON',
-            payload: {
-              fileData: fileData,
-              zoomLevel: zoomLevel,
-              tileSize: TILE_L
-            }
-          });
-        });
-
-        canvas.addEventListener('click', (e) => {
-          const world = screenToWorld(e.clientX, e.clientY);
-          const building = getBuildingAtPosition(world.x, world.y);
-          if (!building) {
-            return;
-          }
-
-          vscode.postMessage({
-            type: 'OPEN_CLASS_SOURCE',
-            payload: {
-              className: building.className
-            }
-          });
-        });
-
-        //initial render
-        render();
-
-        // Handshake: tell extension we are ready so it sends FULL_STATE (avoids dropped messages)
-        vscode.postMessage({ type: 'READY' });
+        // webviewMain.ts (compiled to webviewBundle.js) handles all rendering and messaging
       </script>
     </body>
     </html>
