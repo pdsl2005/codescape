@@ -2,3 +2,19 @@ node_modules/
 out/
 *.vsix
 .vscode-test/
+
+# environment / secrets
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+
+# logs
+*.log
+npm-debug.log*
+
+# JetBrains IDE (keep .idea/.gitignore itself, ignore everything else)
+.idea/*
+!.idea/.gitignore
