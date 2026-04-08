@@ -1,0 +1,76 @@
+{
+  "sourceFile": "MultiClass.java",
+  "parsedAt": "2026-04-08T21:15:26.957Z",
+  "classes": [
+    {
+      "Classname": "OuterClass",
+      "Methods": [
+        {
+          "name": "outerMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 9,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [
+        {
+          "name": "value",
+          "type": "int",
+          "modifiers": [
+            "private"
+          ]
+        }
+      ],
+      "Constructors": [],
+      "innerClasses": [
+        "InnerClass"
+      ]
+    },
+    {
+      "Classname": "InnerClass",
+      "Methods": [
+        {
+          "name": "innerMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 3,
+      "Type": "default",
+      "Extends": "OuterClass",
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "OuterClass"
+    },
+    {
+      "Classname": "UtilityClass",
+      "Methods": [
+        {
+          "name": "helperMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public",
+            "static"
+          ]
+        }
+      ],
+      "Loc": 3,
+      "Type": "final",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": []
+    }
+  ]
+}

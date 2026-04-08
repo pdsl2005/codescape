@@ -1,0 +1,231 @@
+{
+  "sourceFile": "InnerClasses.java",
+  "parsedAt": "2026-04-08T21:15:26.975Z",
+  "classes": [
+    {
+      "Classname": "OuterClass",
+      "Methods": [
+        {
+          "name": "outerMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 85,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [
+        {
+          "name": "outerField",
+          "type": "String",
+          "modifiers": [
+            "private"
+          ]
+        }
+      ],
+      "Constructors": [
+        {
+          "parameters": [
+            {
+              "name": "value",
+              "type": "String"
+            }
+          ],
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "innerClasses": [
+        "InstanceInnerClass",
+        "StaticNestedClass",
+        "PrivateInnerClass",
+        "ProtectedInnerClass",
+        "FinalInnerClass",
+        "AbstractInnerClass"
+      ]
+    },
+    {
+      "Classname": "InstanceInnerClass",
+      "Methods": [
+        {
+          "name": "innerMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        },
+        {
+          "name": "getInnerField",
+          "parameters": [],
+          "returnType": "int",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 15,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [
+        {
+          "name": "innerField",
+          "type": "int",
+          "modifiers": [
+            "private"
+          ]
+        }
+      ],
+      "Constructors": [
+        {
+          "parameters": [
+            {
+              "name": "value",
+              "type": "int"
+            }
+          ],
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "parentClass": "OuterClass"
+    },
+    {
+      "Classname": "StaticNestedClass",
+      "Methods": [
+        {
+          "name": "staticMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 11,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [
+        {
+          "name": "staticField",
+          "type": "String",
+          "modifiers": [
+            "private"
+          ]
+        }
+      ],
+      "Constructors": [
+        {
+          "parameters": [
+            {
+              "name": "value",
+              "type": "String"
+            }
+          ],
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "parentClass": "OuterClass",
+      "isStatic": true
+    },
+    {
+      "Classname": "PrivateInnerClass",
+      "Methods": [
+        {
+          "name": "privateMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 5,
+      "Type": "private",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "OuterClass"
+    },
+    {
+      "Classname": "ProtectedInnerClass",
+      "Methods": [
+        {
+          "name": "protectedMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 5,
+      "Type": "protected",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "OuterClass"
+    },
+    {
+      "Classname": "FinalInnerClass",
+      "Methods": [
+        {
+          "name": "finalMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 5,
+      "Type": "final",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "OuterClass"
+    },
+    {
+      "Classname": "AbstractInnerClass",
+      "Methods": [
+        {
+          "name": "abstractMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public",
+            "abstract"
+          ]
+        },
+        {
+          "name": "concreteMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 7,
+      "Type": "abstract",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "OuterClass"
+    }
+  ]
+}

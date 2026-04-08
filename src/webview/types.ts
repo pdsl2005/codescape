@@ -55,13 +55,18 @@ export interface BuildingDTO {
   classes?: number;
 }
 
+const COLOR_PALETTE = [
+  "#598BAF", "#8B5CF6", "#10B981", "#F59E0B",
+  "#EF4444", "#14B8A6", "#6366F1", "#EC4899",
+];
+
 /** Convert FileData[] to BuildingDTO[] for renderers that need grid positions. */
 export function filesToBuildingDTOs(files: FileData[]): BuildingDTO[] {
   return files.map((file, i) => ({
     col: i % 10,
     row: Math.floor(i / 10),
     floors: file.functions + file.classes,
-    color: "#598BAF",
+    color: COLOR_PALETTE[i % COLOR_PALETTE.length],
     name: file.name,
     lines: file.lines,
     functions: file.functions,

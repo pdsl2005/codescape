@@ -28,11 +28,10 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   // City state
   private buildings: BuildingDTO[] = [];
 
-  // Viewport state (matches existing inline script variables)
   private TILE_L = 50;
-  private offsetX = 0;
-  private offsetY = 100;
-  private zoomLevel = 1;
+
+  // Viewport transform — single source of truth for pan + zoom (Heewon)
+  private vt = { x: 0, y: 100, scale: 1 };
 
   // For panning
   private isPanning = false;
@@ -85,7 +84,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     // Set initial size
     this.canvas.width = container.clientWidth || window.innerWidth;
     this.canvas.height = container.clientHeight || window.innerHeight;
-    this.offsetX = this.canvas.width / 2;
+    this.vt = { x: this.canvas.width / 2, y: 100, scale: 1 };
 
     // Bind event listeners
     this.bindEvents();
@@ -125,19 +124,16 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
 
     const ctx = this.ctx;
 
-    // Apply viewport transform (pan + zoom)
+    // Apply viewport transform — pan + zoom anchored to cursor (Heewon)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    ctx.setTransform(
-      this.zoomLevel, 0, 0, this.zoomLevel,
-      0, 0
-    );
+    ctx.setTransform(this.vt.scale, 0, 0, this.vt.scale, this.vt.x, this.vt.y);
 
     // Calculate grid size based on buildings
     const gridLength = this.calculateGridSize();
 
-    // Draw grid
-    this.drawIsoGrid(ctx, gridLength, gridLength, this.TILE_L, this.offsetX, this.offsetY);
+    // Draw grid — offset is 0,0 since vt handles positioning
+    this.drawIsoGrid(ctx, gridLength, gridLength, this.TILE_L, 0, 0);
 
     // Sort buildings by depth (back to front)
     const sorted = [...this.buildings].sort(
@@ -172,22 +168,19 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     if (!this.canvas) return;
     this.canvas.width = width;
     this.canvas.height = height;
-    this.offsetX = width / 2;
+    this.vt.x = width / 2;
     this.refresh();
   }
 
   zoom(delta: number): void {
-    const oldScale = this.zoomLevel;
-    const newScale = Math.max(0.2, Math.min(4, oldScale + delta));
-    this.zoomLevel = newScale;
+    const newScale = Math.max(0.2, Math.min(4, this.vt.scale + delta));
+    this.vt.scale = newScale;
     this.refresh();
   }
 
   resetView(): void {
-    this.zoomLevel = 1;
     if (this.canvas) {
-      this.offsetX = this.canvas.width / 2;
-      this.offsetY = 100;
+      this.vt = { x: this.canvas.width / 2, y: 100, scale: 1 };
     }
     this.refresh();
   }
@@ -197,9 +190,9 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   // =========================================================================
 
   hitTest(x: number, y: number): HitTestResult | null {
-    // Adjust for zoom
-    const adjX = x / this.zoomLevel;
-    const adjY = y / this.zoomLevel;
+    // Inverse of setTransform(scale, 0, 0, scale, vt.x, vt.y)
+    const adjX = (x - this.vt.x) / this.vt.scale;
+    const adjY = (y - this.vt.y) / this.vt.scale;
 
     // Check in reverse order (last drawn = visually on top)
     for (let i = this.buildingBounds.length - 1; i >= 0; i--) {
@@ -377,8 +370,9 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     col: number, row: number,
     floors: number, color: string
   ): { screenX: number; screenY: number } {
-    const isoX = (col - row) * this.TILE_L / 2 + this.offsetX;
-    const isoY = (col + row) * this.TILE_L / 4 + this.offsetY;
+    // Offset is 0,0 — vt transform handles positioning
+    const isoX = (col - row) * this.TILE_L / 2;
+    const isoY = (col + row) * this.TILE_L / 4;
 
     this.drawIsoBuilding(ctx, isoX, isoY + this.TILE_L / 2, floors - 1, this.TILE_L, color);
 
@@ -401,15 +395,21 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
       }
     };
 
+    // Cursor-anchored zoom (Heewon)
     this.boundOnWheel = (e: WheelEvent) => {
       e.preventDefault();
-      this.zoom(e.deltaY * -0.0015);
+      const oldScale = this.vt.scale;
+      const newScale = Math.max(0.2, Math.min(4, oldScale + e.deltaY * -0.0015));
+      this.vt.x = e.clientX - (e.clientX - this.vt.x) * (newScale / oldScale);
+      this.vt.y = e.clientY - (e.clientY - this.vt.y) * (newScale / oldScale);
+      this.vt.scale = newScale;
+      this.refresh();
     };
 
     this.boundOnMouseMove = (e: MouseEvent) => {
       if (!this.isPanning) return;
-      this.offsetX += (e.clientX - this.prevX) / this.zoomLevel;
-      this.offsetY += (e.clientY - this.prevY) / this.zoomLevel;
+      this.vt.x += e.clientX - this.prevX;
+      this.vt.y += e.clientY - this.prevY;
       this.prevX = e.clientX;
       this.prevY = e.clientY;
       this.refresh();
