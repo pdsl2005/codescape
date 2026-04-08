@@ -1,0 +1,32 @@
+{
+  "sourceFile": "Printable.java",
+  "parsedAt": "2026-04-01T22:22:02.122Z",
+  "classes": [
+    {
+      "Classname": "Printable",
+      "Methods": [
+        {
+          "name": "print",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": []
+        },
+        {
+          "name": "format",
+          "parameters": [],
+          "returnType": "String",
+          "modifiers": []
+        }
+      ],
+      "Loc": 4,
+      "Type": "interface",
+      "Extends": null,
+      "Implements": [
+        "Displayable",
+        "Formattable"
+      ],
+      "Fields": [],
+      "Constructors": []
+    }
+  ]
+}

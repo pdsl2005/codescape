@@ -1,0 +1,80 @@
+{
+  "sourceFile": "PersonClass.java",
+  "parsedAt": "2026-04-01T22:22:02.101Z",
+  "classes": [
+    {
+      "Classname": "PersonClass",
+      "Methods": [
+        {
+          "name": "getName",
+          "parameters": [],
+          "returnType": "String",
+          "modifiers": [
+            "public"
+          ]
+        },
+        {
+          "name": "getAge",
+          "parameters": [],
+          "returnType": "int",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 23,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [
+        {
+          "name": "name",
+          "type": "String",
+          "modifiers": [
+            "private"
+          ]
+        },
+        {
+          "name": "age",
+          "type": "int",
+          "modifiers": [
+            "private"
+          ]
+        },
+        {
+          "name": "DEFAULT_NAME",
+          "type": "String",
+          "modifiers": [
+            "public",
+            "static",
+            "final"
+          ],
+          "initializer": "\"Unknown\""
+        }
+      ],
+      "Constructors": [
+        {
+          "parameters": [],
+          "modifiers": [
+            "public"
+          ]
+        },
+        {
+          "parameters": [
+            {
+              "name": "name",
+              "type": "String"
+            },
+            {
+              "name": "age",
+              "type": "int"
+            }
+          ],
+          "modifiers": [
+            "public"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "sourceFile": "AbstractService.java",
+  "parsedAt": "2026-04-01T22:22:02.081Z",
+  "classes": [
+    {
+      "Classname": "AbstractService",
+      "Methods": [
+        {
+          "name": "start",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        },
+        {
+          "name": "initialize",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "protected",
+            "abstract"
+          ]
+        },
+        {
+          "name": "stop",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        },
+        {
+          "name": "cleanup",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "private"
+          ]
+        }
+      ],
+      "Loc": 22,
+      "Type": "abstract",
+      "Extends": "BaseService",
+      "Implements": [
+        "Serializable",
+        "Loggable"
+      ],
+      "Fields": [
+        {
+          "name": "MAX_RETRIES",
+          "type": "int",
+          "modifiers": [
+            "private",
+            "static",
+            "final"
+          ],
+          "initializer": "3"
+        },
+        {
+          "name": "initialized",
+          "type": "boolean",
+          "modifiers": [
+            "protected"
+          ],
+          "initializer": "false"
+        }
+      ],
+      "Constructors": [
+        {
+          "parameters": [],
+          "modifiers": [
+            "public"
+          ]
+        }
+      ]
+    }
+  ]
+}

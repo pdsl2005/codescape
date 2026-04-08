@@ -1,0 +1,16 @@
+{
+  "sourceFile": "MinimalClass.java",
+  "parsedAt": "2026-04-01T22:22:02.050Z",
+  "classes": [
+    {
+      "Classname": "MinimalClass",
+      "Methods": [],
+      "Loc": 2,
+      "Type": "default",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": []
+    }
+  ]
+}

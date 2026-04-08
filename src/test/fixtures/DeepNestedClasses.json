@@ -1,0 +1,134 @@
+{
+  "sourceFile": "DeepNestedClasses.java",
+  "parsedAt": "2026-04-01T22:22:02.105Z",
+  "classes": [
+    {
+      "Classname": "Outermost",
+      "Methods": [],
+      "Loc": 29,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "innerClasses": [
+        "FirstLevel",
+        "OutermostStatic"
+      ]
+    },
+    {
+      "Classname": "FirstLevel",
+      "Methods": [],
+      "Loc": 19,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "Outermost",
+      "innerClasses": [
+        "SecondLevel",
+        "FirstLevelStatic"
+      ]
+    },
+    {
+      "Classname": "SecondLevel",
+      "Methods": [
+        {
+          "name": "deepMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 11,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "FirstLevel",
+      "innerClasses": [
+        "ThirdLevel"
+      ]
+    },
+    {
+      "Classname": "ThirdLevel",
+      "Methods": [
+        {
+          "name": "veryDeepMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 5,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "SecondLevel"
+    },
+    {
+      "Classname": "FirstLevelStatic",
+      "Methods": [
+        {
+          "name": "staticDeepMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 5,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "FirstLevel",
+      "isStatic": true
+    },
+    {
+      "Classname": "OutermostStatic",
+      "Methods": [],
+      "Loc": 7,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "Outermost",
+      "isStatic": true,
+      "innerClasses": [
+        "NestedInStatic"
+      ]
+    },
+    {
+      "Classname": "NestedInStatic",
+      "Methods": [
+        {
+          "name": "nestedStaticMethod",
+          "parameters": [],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 5,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "OutermostStatic"
+    }
+  ]
+}

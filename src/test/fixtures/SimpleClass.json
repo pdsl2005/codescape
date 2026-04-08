@@ -1,0 +1,43 @@
+{
+  "sourceFile": "SimpleClass.java",
+  "parsedAt": "2026-04-01T22:22:02.129Z",
+  "classes": [
+    {
+      "Classname": "SimpleClass",
+      "Methods": [
+        {
+          "name": "setName",
+          "parameters": [
+            "String"
+          ],
+          "returnType": "void",
+          "modifiers": [
+            "public"
+          ]
+        },
+        {
+          "name": "getName",
+          "parameters": [],
+          "returnType": "String",
+          "modifiers": [
+            "public"
+          ]
+        }
+      ],
+      "Loc": 11,
+      "Type": "public",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [
+        {
+          "name": "name",
+          "type": "String",
+          "modifiers": [
+            "private"
+          ]
+        }
+      ],
+      "Constructors": []
+    }
+  ]
+}
