@@ -1,6 +1,6 @@
 import { RendererRegistry } from "./ICityRenderer";
 import { CanvasIsoCityRenderer } from "./CanvasIsoCityRenderer";
-// import { ThreeJsCityRenderer } from "./ThreeJsCityRenderer"; // SCRUM-172
+import { ThreeJsCityRenderer } from "./ThreeJsCityRenderer";
 import { CityState, FileData } from "./types";
 
 // Declare the VS Code API (available in webview context)
@@ -21,7 +21,7 @@ if (!container) {
 
 const registry = new RendererRegistry();
 registry.register("canvas2d", new CanvasIsoCityRenderer());
-// registry.register("threejs", new ThreeJsCityRenderer()); // SCRUM-172
+registry.register("threejs", new ThreeJsCityRenderer());
 
 const events = {
   onBuildingClick: (result: unknown) => {
@@ -35,6 +35,11 @@ const events = {
 
 // Start with Canvas 2D as default
 registry.setActive("canvas2d", container, events);
+
+// ── State ──────────────────────────────────────────────────────────────
+
+// Maintained so PARTIAL_STATE can merge into it and re-render
+let currentClasses: any[] = [];
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -58,13 +63,35 @@ function parsedClassesToCityState(classes: any[]): CityState {
 window.addEventListener("message", (event) => {
   const msg = event.data;
   const renderer = registry.getActive();
-  if (!renderer) return;
+  if (!renderer) { return; }
 
   switch (msg.type) {
     case "FULL_STATE": {
-      // Extension sends { classes: ParsedClassInfo[], status: string }
-      const state: CityState = parsedClassesToCityState(msg.payload.classes ?? []);
-      renderer.renderCity(state);
+      // Replace full state and re-render
+      currentClasses = msg.payload.classes ?? [];
+      renderer.renderCity(parsedClassesToCityState(currentClasses));
+      break;
+    }
+
+    case "PARTIAL_STATE": {
+      // Merge changes into currentClasses, then re-render
+      const { changed = [], related = [], removed = [] } = msg.payload;
+
+      // Remove deleted classes
+      currentClasses = currentClasses.filter(
+        (cls) => !removed.includes(cls.Classname)
+      );
+
+      // Apply changed + related updates
+      const classMap = new Map(
+        currentClasses.map((cls) => [cls.Classname, cls])
+      );
+      [...changed, ...related].forEach((cls) =>
+        classMap.set(cls.Classname, cls)
+      );
+      currentClasses = Array.from(classMap.values());
+
+      renderer.renderCity(parsedClassesToCityState(currentClasses));
       break;
     }
 
