@@ -61,6 +61,7 @@
   },
   "dependencies": {
     "minimatch": "^10.1.2",
+    "three": "^0.183.2",
     "tree-sitter-java": "^0.23.5",
     "tree-sitter-python": "^0.25.0",
     "web-tree-sitter": "^0.26.5"

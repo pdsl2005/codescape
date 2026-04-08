@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D CodeScape</title>
+
+  <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.141.0/build/three.module.js"
+        }
+    } </script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #f2f2f2;
+      font-family: Arial, sans-serif;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #ui {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      z-index: 10;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">3D CodeScape</div>
+  <script type="module" src="./main3.js"></script>
+</body>
+</html>
