@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CSS2DObject } from 'https://unpkg.com/three@0.141.0/examples/jsm/renderers/CSS2DRenderer.js';
 
 const houseTextures = [
   "./images/house.png",
@@ -119,7 +120,7 @@ export function createHouse(dto) {
   group.position.set(dto.col, 0, dto.row);
   group.userData = dto;
 
-  return group;
+  return attachUmlToGroup(group, dto); // changed this line - heewon
 }
 
 // create apt 
@@ -141,7 +142,7 @@ export function createApartment(dto) {
   group.position.set(dto.col, 0, dto.row);
   group.userData = dto;
 
-  return group;
+  return attachUmlToGroup(group, dto);
 }
 
 // create skyscraper 
@@ -163,7 +164,7 @@ export function createSkyscraper(dto) {
   group.position.set(dto.col, 0, dto.row);
   group.userData = dto;
 
-  return group;
+  return attachUmlToGroup(group, dto);
 }
 
 // decide type of building depending on the floor height 
@@ -181,4 +182,89 @@ export function createBuildingFromDTO(dto) {
 
 export function createBuildingsFromDTOs(dtoList) {
   return dtoList.map(dto => createBuildingFromDTO(dto));
+}
+
+// creating uml label per dto
+function createUmlLabel(dto) {
+  const uml = dto.uml || {
+    name: `Building_${dto.col}_${dto.row}`,
+    fields: [
+      `col: ${dto.col}`,
+      `row: ${dto.row}`,
+      `floors: ${dto.floors}`
+      //`color: ${dto.color || "N/A"}`
+    ],
+    methods: []
+  };
+
+  const root = document.createElement("div");
+  root.style.minWidth = "220px";
+  root.style.maxWidth = "280px";
+  root.style.background = "#1a1a2e";
+  root.style.border = "2px solid #598BAF";
+  root.style.borderRadius = "8px";
+  root.style.overflow = "hidden";
+  root.style.color = "#d9d9d9";
+  root.style.fontFamily = "monospace";
+  root.style.fontSize = "13px";
+  root.style.boxShadow = "0 6px 18px rgba(0,0,0,0.35)";
+  //root.style.display = "none"; 
+  root.style.pointerEvents = "none";
+  root.style.whiteSpace = "pre-wrap";
+
+  const header = document.createElement("div");
+  header.textContent = uml.name || "Unnamed";
+  header.style.background = "#598BAF";
+  header.style.color = "#ffffff";
+  header.style.fontWeight = "bold";
+  header.style.textAlign = "center";
+  header.style.padding = "8px 10px";
+  header.style.fontSize = "15px";
+  root.appendChild(header);
+
+  const fieldsSection = document.createElement("div");
+  fieldsSection.style.padding = "8px 10px";
+  fieldsSection.style.borderTop = "1px solid #598BAF";
+
+  (uml.fields || []).forEach((field) => {
+    const line = document.createElement("div");
+    line.textContent = `- ${field}`;
+    line.style.margin = "3px 0";
+    fieldsSection.appendChild(line);
+  });
+  root.appendChild(fieldsSection);
+
+  const methodsSection = document.createElement("div");
+  methodsSection.style.padding = "8px 10px";
+  methodsSection.style.borderTop = "1px solid #598BAF";
+
+  (uml.methods || []).forEach((method) => {
+    const line = document.createElement("div");
+    line.textContent = `+ ${method}`;
+    line.style.margin = "3px 0";
+    methodsSection.appendChild(line);
+  });
+  root.appendChild(methodsSection);
+
+  const label = new CSS2DObject(root);
+  label.visible = false;
+  return label;
+}
+
+// displaying uml label to the building
+function attachUmlToGroup(group, dto) {
+  const umlLabel = createUmlLabel(dto);
+
+  // roof / building 위쪽에 뜨도록
+  umlLabel.position.set(0, dto.floors + 1.2, 0);
+
+  group.add(umlLabel);
+
+  group.userData = {
+    ...dto,
+    isBuilding: true,
+    umlLabel: umlLabel
+  };
+
+  return group;
 }
