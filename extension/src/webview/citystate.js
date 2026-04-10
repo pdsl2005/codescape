@@ -295,4 +295,12 @@ export class CityState {
         }
         return null;
     }
+    zoom(deltaY){
+        if (deltaY < 0) {
+            this.zoomLevel = Math.min(this.zoomLevel * 1.1, 3);
+        } else {
+            this.zoomLevel = Math.max(this.zoomLevel * 0.9, 0.3);
+        }
+        this.render();
+    }
 }

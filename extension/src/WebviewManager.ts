@@ -162,9 +162,9 @@ export class WebviewManager {
         const umlUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.extensionUri, 'src', 'webview', 'uml.js')
         );
-        const cityUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this.extensionUri, 'src','webview','citystate.js')
+        const adapterUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this.extensionUri, 'src','webview','adapter-vscode.js')
         )
-        return buildCityWebviewHtml(umlUri.toString(), cityUri.toString());
+        return buildCityWebviewHtml(umlUri.toString(), adapterUri.toString());
     }
 }

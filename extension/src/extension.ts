@@ -1,7 +1,6 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
-import * as path from "path";
 import { minimatch } from "minimatch";
 import { JavaFileWatcher } from "./JavaFileWatcher";
 import { WebviewManager } from "./WebviewManager";
@@ -89,12 +88,10 @@ const create = vscode.commands.registerCommand('codescape.createPanel', () => {
           return;
         }
 
-        const outputPath = path.join(
-          workspaceFolders[0].uri.fsPath,
-          "codescape-output.json",
+        const outputUri = vscode.Uri.joinPath(
+            workspaceFolders[0].uri,
+            'codescape-output.json'
         );
-        const outputUri = vscode.Uri.file(outputPath);
-
         // Convert to exportable format with better structure
         const exportData = {
           exportedAt: new Date().toISOString(),
@@ -113,9 +110,9 @@ const create = vscode.commands.registerCommand('codescape.createPanel', () => {
         );
 
         vscode.window.showInformationMessage(
-          `Exported parse store to ${outputPath}`,
+          `Exported parse store to ${outputUri.fsPath}`,
         );
-        console.log(`Parse store exported to: ${outputPath}`);
+        console.log(`Parse store exported to: ${outputUri.fsPath}`);
       } catch (err) {
         vscode.window.showErrorMessage(`Failed to export parse store: ${err}`);
         console.error("Export failed:", err);
@@ -149,7 +146,8 @@ async function openClassSourceFromClassName(className: string, store: FileParseS
     const fileUri = vscode.Uri.parse(uri);
 
     const isInWorkspace = workspaceFolders.some((folder: vscode.WorkspaceFolder) =>
-      fileUri.fsPath.startsWith(folder.uri.fsPath + path.sep)
+      fileUri.fsPath.startsWith(folder.uri.fsPath + '/') || 
+      fileUri.fsPath.startsWith(folder.uri.fsPath + '\\')
     );
     if (!isInWorkspace) {
       return;
@@ -283,10 +281,10 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): s
   const umlUri = webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, "src", "webview", "uml.js")
   );
-  const cityUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "src", "webview", "citystate.js")
+  const adapterUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, "src", "webview", "adapter-vscode.js")
   )
-  return buildCityWebviewHtml(umlUri.toString(), cityUri.toString());
+  return buildCityWebviewHtml(umlUri.toString(), adapterUri.toString());
 }
 
 // sidebar view
