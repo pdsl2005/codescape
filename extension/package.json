@@ -13,39 +13,7 @@
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
-    "configuration": {
-      "title": "Codescape",
-      "properties": {
-        "codescape.supabaseUrl": {
-          "type": "string",
-          "default": "",
-          "description": "Supabase project URL (e.g. https://xyzcompany.supabase.co). Used to call Edge Functions for website account linking."
-        },
-        "codescape.functionsAnonKey": {
-          "type": "string",
-          "default": "",
-          "description": "Supabase anon (public) key. Passed as apikey when invoking Edge Functions from the extension."
-        },
-        "codescape.websiteUrl": {
-          "type": "string",
-          "default": "http://localhost:3000",
-          "description": "Codescape web app URL. Opened when you need to sign in on the website before linking from VS Code."
-        }
-      }
-    },
     "commands": [
-      {
-        "command": "codescape.linkWebsiteAccount",
-        "title": "Codescape: Link website account (GitHub)"
-      },
-      {
-        "command": "codescape.unlinkWebsiteAccount",
-        "title": "Codescape: Unlink website account"
-      },
-      {
-        "command": "codescape.showLinkedAccount",
-        "title": "Codescape: Show linked website account"
-      },
       {
         "command": "codescape.createPanel",
         "title": "Create Panel"
