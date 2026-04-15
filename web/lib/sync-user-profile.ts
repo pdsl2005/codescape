@@ -6,7 +6,11 @@ function getGitHubFieldsFromUser(user: User): {
   avatarUrl: string | null
 } {
   const ghIdentity = user.identities?.find((i) => i.provider === 'github')
-  const providerId = ghIdentity?.provider_id
+  const providerId = (ghIdentity?.identity_data?.provider_id ??
+    (ghIdentity as { provider_id?: unknown } | undefined)?.provider_id) as
+    | string
+    | number
+    | undefined
   const meta = user.user_metadata ?? {}
   const username =
     (typeof meta.user_name === 'string' && meta.user_name) ||
