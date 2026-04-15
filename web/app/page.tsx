@@ -1,65 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import type { Session } from '@supabase/supabase-js'
-import { importUserRepos } from '@/lib/repos'
+import { createClient } from '@/lib/supabase-browser'
+import { GITHUB_OAUTH_SCOPE } from '@/lib/github-config'
 
 export default function Home() {
-  const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(true)
-  const router = useRouter()
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setLoading(false)
-    })
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session)
-      setLoading(false)
-
-      if (event === 'SIGNED_IN' && session) {
-        const githubToken = session.provider_token
-        const userId = session.user.id
-        if (githubToken) {
-          setTimeout(() => {
-            void importUserRepos(githubToken, userId).catch((err) => {
-              console.error('importUserRepos failed:', err)
-            })
-          }, 0)
-        }
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  useEffect(() => {
-    if (!loading && session) {
-      router.push('/dashboard')
-    }
-  }, [loading, session, router])
-
   const signInWithGitHub = async () => {
+    const supabase = createClient()
     await supabase.auth.signInWithOAuth({
       provider: 'github',
       options: {
-        redirectTo: window.location.origin,
+        scopes: GITHUB_OAUTH_SCOPE,
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     })
-  }
-
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="text-zinc-500">Loading...</p>
-      </div>
-    )
   }
 
   return (
