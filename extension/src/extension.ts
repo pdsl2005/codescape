@@ -8,6 +8,12 @@ import { initializeParser, parseAndStore } from "./parser";
 import { buildCityWebviewHtml } from "./cityWebviewHtml";
 import { computeCityLayout } from "./cityLayout";
 import { FileParseStore } from "./state";
+import {
+  getLinkedAccount,
+  linkCodescapeAccount,
+  showLinkedAccountStatus,
+  unlinkCodescapeAccount,
+} from "./accountLink";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -120,13 +126,36 @@ const create = vscode.commands.registerCommand('codescape.createPanel', () => {
     },
   );
 
+  const linkWebsite = vscode.commands.registerCommand(
+    "codescape.linkWebsiteAccount",
+    () => linkCodescapeAccount(context),
+  );
+  const unlinkWebsite = vscode.commands.registerCommand(
+    "codescape.unlinkWebsiteAccount",
+    () => unlinkCodescapeAccount(context),
+  );
+  const showLinked = vscode.commands.registerCommand(
+    "codescape.showLinkedAccount",
+    () => showLinkedAccountStatus(context),
+  );
+
   context.subscriptions.push(dumpDisposable);
   context.subscriptions.push(exportDisposable);
+  context.subscriptions.push(linkWebsite);
+  context.subscriptions.push(unlinkWebsite);
+  context.subscriptions.push(showLinked);
   context.subscriptions.push(javaWatcher);
   context.subscriptions.push(create);
   context.subscriptions.push(createSidePanel);
   context.subscriptions.push(createBottomPanel);
   context.subscriptions.push(scan);
+
+  const linked = getLinkedAccount(context);
+  if (linked) {
+    console.log(
+      `Codescape: website account linked as @${linked.githubLogin} (${linked.supabaseUserId})`,
+    );
+  }
 }
 
 async function openClassSourceFromClassName(className: string, store: FileParseStore) {
