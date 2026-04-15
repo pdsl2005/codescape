@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { GitHubAuthError, requireGitHubTokenFromSession } from '@/lib/github-auth'
 import { createClient } from '@/lib/supabase-server'
 import { syncUserRepos } from '@/lib/sync-repos'
+import { syncUserProfile } from '@/lib/sync-user-profile'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -17,6 +18,12 @@ export async function GET(request: Request) {
 
   if (error || !data.session) {
     return NextResponse.redirect(`${origin}/?error=auth`)
+  }
+
+  try {
+    await syncUserProfile(supabase, data.session.user)
+  } catch (err) {
+    console.error('User profile sync failed on auth callback:', err)
   }
 
   try {
