@@ -1,12 +1,10 @@
-import type { Session } from '@supabase/supabase-js'
-import { supabase } from './supabase'
+import type { SupabaseClient, User } from '@supabase/supabase-js'
 
-export function getGithubFieldsFromSession(session: Session): {
+function getGitHubFieldsFromUser(user: User): {
   githubId: string | null
   username: string | null
   avatarUrl: string | null
 } {
-  const user = session.user
   const ghIdentity = user.identities?.find((i) => i.provider === 'github')
   const providerId = ghIdentity?.provider_id
   const meta = user.user_metadata ?? {}
@@ -24,33 +22,33 @@ export function getGithubFieldsFromSession(session: Session): {
   }
 }
 
-/**
- * Keeps public.users in sync with the latest GitHub profile from Supabase Auth
- * and stores github_id so the VS Code extension can resolve the same row via GitHub API.
- */
-export async function syncUserProfileFromSession(session: Session): Promise<void> {
-  const { githubId, username, avatarUrl } = getGithubFieldsFromSession(session)
+export async function syncUserProfile(
+  supabase: SupabaseClient,
+  user: User
+): Promise<void> {
+  const { githubId, username, avatarUrl } = getGitHubFieldsFromUser(user)
+
   if (!githubId || !username) {
-    console.warn(
-      'syncUserProfileFromSession: missing GitHub provider_id or username; skipping upsert',
-      { githubId, username },
-    )
+    console.warn('syncUserProfile: missing GitHub provider_id or username; skipping upsert', {
+      githubId,
+      username,
+    })
     return
   }
 
   const { error } = await supabase.from('users').upsert(
     {
-      id: session.user.id,
+      id: user.id,
       username,
       avatar_url: avatarUrl,
       github_id: githubId,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: 'id' },
+    { onConflict: 'id' }
   )
 
   if (error) {
-    console.error('syncUserProfileFromSession failed', error)
+    console.error('syncUserProfile failed', error)
     throw error
   }
 }
