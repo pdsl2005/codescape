@@ -254,6 +254,12 @@ export class CityState {
         this.ctx.restore();
     }
 
+    resize(width, height) {
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.render();
+    }
+
     colRowToWorld(col, row, tileL, ox, oy) {
         const x = ox + (col - row) * (tileL / 2);
         const y = oy + (col + row) * (tileL / 4);
