@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { ClassInfo } from './parser/javaExtractor';
+import {getWebviewContent} from './extension';
 import { buildCityWebviewHtml } from './cityWebviewHtml';
 import type { FullStatePayload, PartialStatePayload } from './types/messages';
 

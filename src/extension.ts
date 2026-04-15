@@ -43,14 +43,20 @@ export async function activate(context: vscode.ExtensionContext) {
   });
 
   const existingFiles = [
-    ...await getJavaFiles(),
-    ...await getPythonFiles(),
+    ...(await getJavaFiles()),
+    ...(await getPythonFiles()),
   ];
 
   for (const uri of existingFiles) {
     await parseAndStore(uri, store);
   }
 
+  // Send full state to webview manager after initial parse
+  const fullState = {
+    classes: store.snapshot().flatMap((e) => e.entry.data ?? []),
+    status: "ready",
+  };
+  webviewManager.broadcastFullState(fullState);
   const classes = store.snapshot().flatMap((entry) => entry.entry.data ?? []);
   webviewManager.broadcastFullState({
     classes,
@@ -107,7 +113,10 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(scan);
 }
 
-async function openClassSourceFromClassName(className: string, store: FileParseStore) {
+async function openClassSourceFromClassName(
+  className: string,
+  store: FileParseStore,
+) {
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders || workspaceFolders.length === 0) {
     return;
@@ -155,7 +164,9 @@ async function openClassSourceFromClassName(className: string, store: FileParseS
     return;
   }
 
-  vscode.window.showInformationMessage(`Could not find source for class ${className}.`);
+  vscode.window.showInformationMessage(
+    `Could not find source for class ${className}.`,
+  );
 }
 
 async function workspaceScan(store: FileParseStore, webviewManager: WebviewManager) {
@@ -165,7 +176,9 @@ async function workspaceScan(store: FileParseStore, webviewManager: WebviewManag
   ];
 
   console.log(`Found ${files.length} source files. Starting parse...`);
-  vscode.window.showInformationMessage(`Codescape: Scanning and parsing ${files.length} source files...`);
+  vscode.window.showInformationMessage(
+    `Codescape: Scanning and parsing ${files.length} source files...`,
+  );
 
   let successCount = 0;
   let failureCount = 0;
@@ -181,9 +194,19 @@ async function workspaceScan(store: FileParseStore, webviewManager: WebviewManag
   }
 
   const snap = store.snapshot();
-  console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
-  vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
+  console.log(
+    `Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`,
+  );
+  vscode.window.showInformationMessage(
+    `Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`,
+  );
 
+  // Broadcast updated full state to all webviews
+  const fullState = {
+    classes: snap.flatMap((e) => e.entry.data ?? []),
+    status: successCount > 0 ? "ready" : "empty",
+  };
+  webviewManager.broadcastFullState(fullState);
   const scannedClasses = snap.flatMap((entry) => entry.entry.data ?? []);
   webviewManager.broadcastFullState({
     classes: scannedClasses,
