@@ -5,7 +5,7 @@
 ### Prerequisites
 - VS Code `^1.74.0`
 - Node.js + npm
-- Java project/workspace with `.java` files
+- Java and/or Python project/workspace with `.java` / `.py` files
 
 ### Build and run from source
 1. Clone and enter repo.
@@ -37,7 +37,7 @@ Placement options in VS Code:
 
 ## 3) What the Visualization Means
 
-- Building = Java class/interface (`ClassInfo`).
+- Building = parsed Java or Python entity (`ClassInfo`).
 - Building height = complexity proxy (`methods + fields`, min 1).
 - Building color = relationship signal (intended UX) and currently implemented as stable per-class palette assignment.
 - Related classes = computed in backend (`relations.ts`) for incremental updates.
@@ -56,7 +56,7 @@ Important current behavior:
 
 ## 5) Incremental Updates
 
-Codescape watches `**/*.java` and sends partial updates:
+Codescape watches `**/*.java` and `**/*.py` and sends partial updates:
 
 - File changed:
   - Re-parse file.
@@ -92,20 +92,29 @@ Runtime-registered internal commands (not contributed in `package.json`):
 ## 8) Practical Workflow
 
 1. Start extension host (`F5`).
-2. Open Java workspace in extension host window.
+2. Open a Java or Python workspace in extension host window.
 3. Open Codescape via sidebar or `Create Panel` command.
-4. Edit/save Java files and observe updates.
+4. Edit/save Java or Python files and observe updates.
 5. Use zoom wheel to inspect layout.
 
 ## 9) Troubleshooting
 
 - City view not updating:
-  - Confirm `.java` file is not excluded by `.exclude`.
+  - Confirm the `.java` or `.py` file is not excluded by `.exclude`.
   - Check extension host logs for parser errors.
 
 - Empty view:
-  - Verify workspace has Java files.
+  - Verify workspace has Java or Python files.
   - Run `codescape.scan` (re-parses backend store; current implementation may still require reopening/reloading view to reflect a full-state refresh).
 
 - Commands missing:
   - Recompile (`npm run compile`) and relaunch extension host.
+
+## 10) Example Workspaces
+
+For a known-good visual smoke test, open one of these folders in the extension host:
+
+- `examples/java-city`
+- `examples/python-city`
+
+Both are intentionally small so the generated city stays compact and in view with the current layout algorithm.

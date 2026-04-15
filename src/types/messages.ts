@@ -1,24 +1,15 @@
 /**
  * Message contract for extension ↔ webview communication.
- * All messages from backend → webview are part of the WebviewMessage union.
+ * Shapes match runtime payloads (ClassInfo from parsers, layout from cityLayout).
  */
 
-/** Per-class/interface data extracted from a Java file (matches parser output). */
-export interface ParsedClassInfo {
-  Classname: string;
-  Methods: string[];
-  Loc: number;
-  Type: string;
-  Extends: string | null;
-  Implements: string[];
-  // Inner/nested class support
-  parentClass?: string;       // Name of parent class (if this is an inner class)
-  innerClasses?: string[];    // Names of inner classes (if this class contains any)
-  isStatic?: boolean;         // Whether this is a static inner class
-  isAnonymous?: boolean;      // Whether this is an anonymous class
-}
+import type { ClassInfo } from '../parser/javaExtractor';
+import type { LayoutMap } from '../layout/types';
 
-/** Single parsed file entry in FULL_STATE or PARTIAL_STATE changed list. */
+/** Per-class entity as produced by Java/Python extractors (single shared schema). */
+export type ParsedClassInfo = ClassInfo;
+
+/** Single parsed file entry (optional grouping; webview may use flat `classes` only). */
 export interface ParsedFile {
   path: string;
   classes: ParsedClassInfo[];
@@ -30,71 +21,39 @@ export interface ParseErrorEntry {
   message: string;
 }
 
-/**
- * Full state message — entire parsed codebase. Sent on initial load.
- *
- * @example
- * {
- *   type: "FULL_STATE",
- *   payload: {
- *     files: [
- *       {
- *         path: "/workspace/src/Main.java",
- *         classes: [
- *           {
- *             Classname: "Main",
- *             Methods: ["main(String[])"],
- *             Loc: 10,
- *             Type: "public",
- *             Extends: null,
- *             Implements: []
- *           }
- *         ]
- *       }
- *     ],
- *     rootPath: "/workspace",
- *     timestamp: "2025-02-18T12:00:00.000Z",
- *     status: "ok",
- *     errors: []
- *   }
- * }
- */
-export interface FullStateMessage {
-  type: 'FULL_STATE';
-  payload: {
-    files: ParsedFile[];
-    rootPath?: string;
-    timestamp: string;
-    status: 'ok' | 'empty';
-    errors: ParseErrorEntry[];
-  };
+/** Payload for FULL_STATE — flat class list + precomputed layout from extension. */
+export interface FullStatePayload {
+  classes: ClassInfo[];
+  layout: LayoutMap;
+  status: 'ready' | 'empty' | 'loading';
+  rootPath?: string;
+  timestamp?: string;
+  errors?: ParseErrorEntry[];
+  /** Legacy: file-grouped data */
+  files?: ParsedFile[];
 }
 
 /**
- * Partial state message — only what changed. Sent on incremental updates.
- *
- * @example
- * {
- *   type: "PARTIAL_STATE",
- *   payload: {
- *     changed: [
- *       {
- *         path: "/workspace/src/Updated.java",
- *         classes: [{ Classname: "Updated", Methods: [], Loc: 5, Type: "public", Extends: null, Implements: [] }]
- *       }
- *     ],
- *     removed: ["/workspace/src/Deleted.java"],
- *     timestamp: "2025-02-18T12:05:00.000Z"
- *   }
- * }
+ * Partial/incremental update. Always includes `fullClasses` + `layout` after an incremental
+ * parse so the webview can replace state without dropping unrelated classes.
  */
+export interface PartialStatePayload {
+  changed: ClassInfo[];
+  related: ClassInfo[];
+  removed: string[];
+  fullClasses: ClassInfo[];
+  layout: LayoutMap;
+  timestamp?: string;
+}
+
+export interface FullStateMessage {
+  type: 'FULL_STATE';
+  payload: FullStatePayload;
+}
+
 export interface PartialStateMessage {
   type: 'PARTIAL_STATE';
-  payload: {
-    changed: ParsedFile[];
-    removed: string[];
-    timestamp: string;
-  };
+  payload: PartialStatePayload;
 }
 
 /** All message types from backend → webview. */
@@ -105,11 +64,10 @@ export interface ReadyMessage {
   type: 'READY';
 }
 
-/** Message from webview → extension: user clicked a building and wants to open its class source. */
+/** Message from webview → extension: user clicked a building and wants to open its source. */
 export interface OpenClassSourceMessage {
   type: 'OPEN_CLASS_SOURCE';
   payload: {
-    /** Simple identifier; extension maps this back to a file via the parse store. */
     className: string;
   };
 }

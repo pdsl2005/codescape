@@ -6,10 +6,33 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-const TILE_L = 50
-const offsetX = canvas.width/2
+const TILE_L = 50;
+const offsetX = canvas.width/2;
 const offsetY = 100;
-const gridLength = 10;
+
+var gridLength = 10;
+
+function updateGridSize(buildings_list) {
+    let maxCol = 0;
+    let maxRow = 0;
+    var gridSize = 10;
+
+    for (const b of buildings_list) {
+        if (b.col > maxCol) {
+            maxCol = b.col;}
+        if (b.row > maxRow){
+            maxRow = b.row;}
+    }
+
+    if ((Math.max(maxCol, maxRow) + 1) <= 10){
+        gridSize = 10;
+    }
+    else {
+        gridSize = Math.max(maxCol, maxRow) + 1;
+    }
+    return gridSize;
+}
+
 var cols = gridLength;
 var rows = gridLength;
 
@@ -33,24 +56,24 @@ const updatePanning = (e) => {
 
     prevX = localX;
     prevY = localY;
-}
+};
 
 const onMouseMove = (e) => {
     updatePanning(e);
     render();
-    console.log(e)
-}
+    console.log(e);
+};
 
 canvas.addEventListener('mousedown', (e) => {
     prevX = e.clientX;
     prevY = e.clientY;
 
-    canvas.addEventListener('mousemove', onMouseMove)
-})
+    canvas.addEventListener('mousemove', onMouseMove);
+});
 
 canvas.addEventListener('mouseup', (e) => {
-    canvas.removeEventListener('mousemove', onMouseMove)
-})
+    canvas.removeEventListener('mousemove', onMouseMove);
+});
 
 // zoom
 const updateZooming = (e) => {
@@ -73,12 +96,12 @@ const updateZooming = (e) => {
     viewportTransform.x = newX;
     viewportTransform.y = newY;
     viewportTransform.scale = newScale;
-}
+};
 
 const onMouseWheel = (e) => {
     updateZooming(e);
     render();
-}
+};
 
 canvas.addEventListener('wheel', onMouseWheel);
 
@@ -91,7 +114,7 @@ window.addEventListener("keydown", (e) => {
         rotationState = 0;
         render();
     }
-})
+});
 
 // BELOW are Render Functions / Tests / Saving / Loading 
 
@@ -150,7 +173,7 @@ window.addEventListener("keydown", (e) => {
         rotationState = (rotationState - 1 + 4) % 4;
         render();
     }
-})
+});
 
 // render function for test city view 
 function render() {
@@ -164,6 +187,8 @@ function render() {
         viewportTransform.x,
         viewportTransform.y
     );
+
+    gridLength = updateGridSize(buildings);
 
     drawIsoGrid(ctx, gridLength, gridLength, TILE_L, offsetX, offsetY);
 
@@ -220,7 +245,7 @@ function saveCityData(buildings_list){
 // rendering function that loads current data
 function loadSavedBuildings(){
     const savedData = localStorage.getItem("cityData");
-    var saved_buildings = JSON.parse(savedData)
+    var saved_buildings = JSON.parse(savedData);
     //grid = Array.from({length: gridLength}, ()=>
     //    Array(gridLength).fill(null));
     //if (saved_buildings) {
@@ -234,4 +259,4 @@ function loadSavedBuildings(){
 // TEST
 buildings = sample_buildings;
 saveCityData(buildings);
-render();
+render(buildings);
