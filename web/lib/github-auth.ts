@@ -44,6 +44,10 @@ export async function requireGitHubSession() {
     data: { session },
   } = await supabase.auth.getSession()
 
+  if (!session) {
+    throw new GitHubAuthError(401, 'Not authenticated')
+  }
+
   const githubToken = requireGitHubTokenFromSession(session)
 
   return {
