@@ -182,7 +182,6 @@ async function openClassSourceFromClassName(className: string, store: FileParseS
 
   vscode.window.showInformationMessage(`Could not find source for class ${className}.`);
 }
-
 async function workspaceScan(store: FileParseStore, webviewManager: WebviewManager) {
   // Get all supported source files not in exclude
   const files = [
@@ -223,6 +222,43 @@ async function workspaceScan(store: FileParseStore, webviewManager: WebviewManag
 //   return await getJavaFiles();
 // }
 
+const DEFAULT_EXCLUDE_PATTERNS = [
+  '**/node_modules/**',
+  '**/.git/**',
+  '**/.vscode-test/**',
+  '**/codescape-json/**',
+  '**/out/**',
+  '**/dist/**',
+  '**/build/**',
+];
+
+async function getExcludePatterns(): Promise<string[]> {
+  const excludeUri = await vscode.workspace.findFiles('.exclude');
+  const patterns = [...DEFAULT_EXCLUDE_PATTERNS];
+
+  if (excludeUri.length > 0) {
+    const content = await vscode.workspace.fs.readFile(excludeUri[0]);
+    const decoded = new TextDecoder('utf-8').decode(content);
+    patterns.push(
+      ...decoded
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== '')
+    );
+  }
+
+  return Array.from(new Set(patterns));
+}
+
+async function buildExcludeGlob(): Promise<string | null> {
+  const patterns = await getExcludePatterns();
+  if (patterns.length === 0) {
+    return null;
+  }
+
+  return `{${patterns.join(',')}}`;
+}
+
 /**
  * Gets all java files within the workspace excluding the ones mentioned in .exclude.
  * Note: Files in .exclude must be in glob pattern.
@@ -232,52 +268,20 @@ async function workspaceScan(store: FileParseStore, webviewManager: WebviewManag
  */
 async function getJavaFiles(): Promise<vscode.Uri[]> {
   console.log("scanning files....");
-  const excludeUri = await vscode.workspace.findFiles(".exclude");
-  let excludeFilter = null;
-  //if there is an exclude file add them to excludeFiles array
-  if (excludeUri.length > 0) {
-    const content = await vscode.workspace.fs.readFile(excludeUri[0]);
-    let decoded = new TextDecoder("utf-8").decode(content);
-    //split by newline, remove newline and\r characters and ensure no empty lines
-    let excludeFiles = decoded
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.trim() !== "");
-    excludeFilter = "{" + excludeFiles.join(",") + "}";
-  }
-  //get all java files and exclude ones in exclude filter
+  const excludeFilter = await buildExcludeGlob();
   let javaFiles = await vscode.workspace.findFiles("**/*.java", excludeFilter);
   return javaFiles;
 }
 
 async function getPythonFiles(): Promise<vscode.Uri[]> {
-  const excludeUri = await vscode.workspace.findFiles(".exclude");
-  let excludeFilter = null;
-  if (excludeUri.length > 0) {
-    const content = await vscode.workspace.fs.readFile(excludeUri[0]);
-    let decoded = new TextDecoder("utf-8").decode(content);
-    let excludeFiles = decoded
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.trim() !== "");
-    excludeFilter = "{" + excludeFiles.join(",") + "}";
-  }
+  const excludeFilter = await buildExcludeGlob();
   return vscode.workspace.findFiles("**/*.py", excludeFilter);
 }
 
 export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
-  const excludeUri = await vscode.workspace.findFiles(".exclude");
-  const path = vscode.workspace.asRelativePath(uri);
-  if (excludeUri.length === 0) {
-    return false;
-  }
-  const content = await vscode.workspace.fs.readFile(excludeUri[0]);
-  let decoded = new TextDecoder("utf-8").decode(content);
-  let excludeFiles = decoded
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.trim() !== "");
-  return excludeFiles.some((pattern) => minimatch(path, pattern));
+  const relativePath = vscode.workspace.asRelativePath(uri);
+  const excludePatterns = await getExcludePatterns();
+  return excludePatterns.some((pattern) => minimatch(relativePath, pattern));
 }
 
 // sidebar view
