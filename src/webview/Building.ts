@@ -37,7 +37,13 @@ export class Building {
   }
 
   needsRebuild(dto: BuildingDTO): boolean {
-    return this.floors !== dto.floors || this.lines !== dto.lines;
+    return this.floors !== dto.floors;
+  }
+
+  syncTransform(dto: BuildingDTO): void {
+    this.group.position.set(dto.col, 0, dto.row);
+    const { umlLabel, isBuilding } = this.group.userData as Record<string, unknown>;
+    this.group.userData = { ...dto, isBuilding, umlLabel, texturePath: this.texturePath };
   }
 
   texturePathForRebuild(dto: BuildingDTO): string | undefined {

@@ -218,6 +218,8 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       if (existing) {
         if (existing.needsRebuild(dto)) {
           this.rebuildBuilding(key, dto, existing);
+        } else {
+          existing.syncTransform(dto);
         }
       } else {
         this.addBuilding(key, dto);
