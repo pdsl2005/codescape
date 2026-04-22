@@ -1,28 +1,30 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'https://unpkg.com/three@0.141.0/examples/jsm/renderers/CSS2DRenderer.js';
 
-const houseTextures = [
-  "./images/house.png",
-  "./images/house2.png",
-  "./images/house3.png"
-];
+let _imageBase = './images';
 
-const apartmentTextures = [
-  "./images/apt.png",
-  "./images/apt2.png",
-  "./images/apt3.png",
-  "./images/apt4.png",
-  "./images/apt5.png"
-];
+export function setImageBasePath(base) {
+  _imageBase = base.replace(/\/$/, '');
+}
 
-const skyscraperTextures = [
-  "./images/skyscraper.png",
-  "./images/skyscraper2.png",
-  "./images/skyscraper3.png",
-  "./images/skyscraper4.png",
-  "./images/skyscraper5.png",
-  "./images/skyscraper6.png"
-];
+function img(filename) {
+  return [_imageBase, filename].join('/');
+}
+
+function houseTextures() {
+  return [img('house.png'), img('house2.png'), img('house3.png')];
+}
+
+function apartmentTextures() {
+  return [img('apt.png'), img('apt2.png'), img('apt3.png'), img('apt4.png'), img('apt5.png')];
+}
+
+function skyscraperTextures() {
+  return [
+    img('skyscraper.png'), img('skyscraper2.png'), img('skyscraper3.png'),
+    img('skyscraper4.png'), img('skyscraper5.png'), img('skyscraper6.png'),
+  ];
+}
 
 export function createLights(scene) {
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
@@ -68,7 +70,7 @@ export function createBoxBlock(width, height, depth, color, texturePath) {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   const geometry = new THREE.BoxGeometry(width, height, depth);
-  const sideMat = new THREE.MeshStandardMaterial({map: tex});
+  const sideMat = new THREE.MeshStandardMaterial({ map: tex, color: new THREE.Color(color) });
   const topBottom = new THREE.MeshStandardMaterial({
     color: new THREE.Color(color)
   });
@@ -102,7 +104,7 @@ export function createHouse(dto) {
   const bodyDepth = gridSize;
   const floorHeight = gridSize;
 
-  const texture = getRandomTexture(houseTextures);
+  const texture = getRandomTexture(houseTextures());
 
   // stack block depending on the floor height 
   for (let i = 0; i < dto.floors; i++) {
@@ -131,7 +133,7 @@ export function createApartment(dto) {
   const bodyDepth = gridSize;
   const floorHeight = gridSize;
 
-  const texture = getRandomTexture(apartmentTextures);
+  const texture = getRandomTexture(apartmentTextures());
 
   for (let i = 0; i < dto.floors; i++) {
     const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#87AE73", texture);
@@ -153,7 +155,7 @@ export function createSkyscraper(dto) {
   const bodyDepth = 1.0;
   const floorHeight = 1.0;
   
-  const texture = getRandomTexture(skyscraperTextures);
+  const texture = getRandomTexture(skyscraperTextures());
 
   for (let i = 0; i < dto.floors; i++) {
     const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#82CAFF", texture);

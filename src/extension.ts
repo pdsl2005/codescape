@@ -292,6 +292,7 @@ class CodescapeViewProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [
         vscode.Uri.joinPath(this.extensionUri, 'src', 'webview'),
         vscode.Uri.joinPath(this.extensionUri, 'out', 'webview'),
+        vscode.Uri.joinPath(this.extensionUri, 'media'),
       ]
     };
     webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
@@ -305,6 +306,9 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
   const bundleUri = webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, "out", "webview", "webviewBundle.js"),
   );
+  const imagesUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, "media", "images"),
+  );
 
   return `
     <!DOCTYPE html>
@@ -313,14 +317,29 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
       <style>
         body { margin: 0; overflow: hidden; }
         #city-container { width: 100vw; height: 100vh; }
+        #toggle-view-btn {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          z-index: 10;
+          padding: 4px 10px;
+          background: var(--vscode-button-background, #0e639c);
+          color: var(--vscode-button-foreground, #fff);
+          border: none;
+          border-radius: 3px;
+          cursor: pointer;
+          font-size: 12px;
+        }
+        #toggle-view-btn:hover {
+          background: var(--vscode-button-hoverBackground, #1177bb);
+        }
       </style>
     </head>
     <body>
       <div id="city-container"></div>
+      <button id="toggle-view-btn">Switch to 3D</button>
+      <script>window.CODESCAPE_IMAGES_URI = "${imagesUri}";</script>
       <script src="${bundleUri}"></script>
-      <script>
-        // webviewMain.ts (compiled to webviewBundle.js) handles all rendering and messaging
-      </script>
     </body>
     </html>
   `;

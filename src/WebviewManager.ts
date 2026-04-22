@@ -38,6 +38,7 @@ export class WebviewManager {
                 localResourceRoots: [
                     vscode.Uri.joinPath(this.extensionUri, 'src', 'webview'),
                     vscode.Uri.joinPath(this.extensionUri, 'out', 'webview'),
+                    vscode.Uri.joinPath(this.extensionUri, 'media'),
                 ],
                 retainContextWhenHidden: true,
             }
