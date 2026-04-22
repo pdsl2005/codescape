@@ -12,7 +12,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRe
 // inside renderer3.js to the local node_modules/three copy at bundle time.
 import {
   createLights,
-  createGround,
+  createGrassGround,
   createGrid,
   disposeTextureCache,
 } from "../../media/renderer3.js";
@@ -110,7 +110,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
 
     // World setup — store returned objects so dispose() can clean them up
     const lights = createLights(this.scene);
-    this.groundObj = createGround(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
+    this.groundObj = createGrassGround(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
     this.gridObj = createGrid(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
     this.worldObjects = [...lights, this.groundObj, this.gridObj];
 
@@ -413,7 +413,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       (o) => o !== this.groundObj && o !== this.gridObj
     );
 
-    const newGround = createGround(this.scene, cols, rows);
+    const newGround = createGrassGround(this.scene, cols, rows);
     const newGrid = createGrid(this.scene, cols, rows);
     this.groundObj = newGround;
     this.gridObj = newGrid;

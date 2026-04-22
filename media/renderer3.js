@@ -54,6 +54,21 @@ export function createGround(scene, cols, rows) {
   return ground;
 }
 
+export function createGrassGround(scene, cols, rows) {
+  const tex = loadTexture(img('grass.png'));
+  tex.repeat.set(cols, rows);  // tile once per grid cell
+
+  const groundGeometry = new THREE.PlaneGeometry(cols, rows);
+  const groundMaterial = new THREE.MeshStandardMaterial({ map: tex });
+
+  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(cols / 2 - 0.5, 0, rows / 2 - 0.5);
+
+  scene.add(ground);
+  return ground;
+}
+
 export function createGrid(scene, cols, rows) {
   const pts = [];
   for (let r = 0; r <= rows; r++) { pts.push(0, 0, r, cols, 0, r); }
