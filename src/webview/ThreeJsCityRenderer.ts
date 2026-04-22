@@ -94,7 +94,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
 
     // Scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xf2f2f2);
+    this.scene.background = new THREE.Color(0x1a1a2e);
 
     // Camera — narrow FOV approximates the orthographic look of the 2D view
     this.camera = new THREE.PerspectiveCamera(20, width / height, 0.1, 2000);
@@ -248,6 +248,13 @@ export class ThreeJsCityRenderer implements ICityRenderer {
 
   refresh(): void {
     // The animation loop handles continuous redraws; nothing extra needed.
+  }
+
+  setTheme(theme: "dark" | "light"): void {
+    if (!this.scene) return;
+    this.scene.background = new THREE.Color(
+      theme === "light" ? 0xf2f2f2 : 0x1a1a2e
+    );
   }
 
   // ── Viewport Controls ──────────────────────────────────────────────────────

@@ -55,8 +55,29 @@ toggleBtn?.addEventListener("click", () => {
   if (newRenderer && currentClasses.length > 0) {
     newRenderer.renderCity(parsedClassesToCityState(currentClasses, currentLayout));
   }
+  applyTheme(currentTheme);
   vscode.postMessage({ type: "VIEW_CHANGED", payload: currentView });
 });
+
+// ── Theme toggle ───────────────────────────────────────────────────────────
+let currentTheme: "dark" | "light" = "dark";
+
+const themeBtn = document.getElementById("toggle-theme-btn") as HTMLButtonElement | null;
+themeBtn?.addEventListener("click", () => {
+  currentTheme = currentTheme === "dark" ? "light" : "dark";
+  applyTheme(currentTheme);
+});
+
+function applyTheme(theme: "dark" | "light"): void {
+  document.body.classList.toggle("cs-light", theme === "light");
+  if (themeBtn) {
+    themeBtn.textContent = theme === "dark" ? "Light Mode" : "Dark Mode";
+  }
+  const renderer = registry.getActive();
+  if (renderer && "setTheme" in renderer) {
+    (renderer as any).setTheme(theme);
+  }
+}
 
 // ── State ──────────────────────────────────────────────────────────────
 

@@ -34,6 +34,12 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   private selectedBuildingName: string | null = null;
 
   private TILE_L = 50;
+  private gridColor = "#2c2c2c";
+
+  setTheme(theme: "dark" | "light"): void {
+    this.gridColor = theme === "light" ? "#cccccc" : "#2c2c2c";
+    this.refresh();
+  }
 
   // Viewport transform — single source of truth for pan + zoom (Heewon)
   private vt = { x: 0, y: 100, scale: 1 };
@@ -324,7 +330,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     rows: number, cols: number,
     size: number, offsetX: number, offsetY: number
   ): void {
-    ctx.strokeStyle = "#2c2c2c";
+    ctx.strokeStyle = this.gridColor;
     const tileW = size;
     const tileH = size / 2;
 
