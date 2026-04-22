@@ -11,6 +11,10 @@ export class JavaFileWatcher {
     private _javaWatcher: vscode.FileSystemWatcher;
     private _pythonWatcher : vscode.FileSystemWatcher;
 
+    // Layout cache — avoids recomputing positions when only class bodies change
+    private _cachedLayoutKey = '';
+    private _cachedLayout: ReturnType<typeof computeCityLayout> | undefined;
+
     constructor(store: FileParseStore, private webviewManager: WebviewManager) {
         this._javaWatcher = vscode.workspace.createFileSystemWatcher('**/*.java');
 
@@ -71,11 +75,14 @@ export class JavaFileWatcher {
         store: FileParseStore
     ): PartialStatePayload {
         const allClasses = store.snapshot().flatMap(e => e.entry.data ?? []);
-        // TODO: fullClasses + layout are always included, so every incremental update
-        // transfers the entire class list and recomputes layout. For large workspaces this
-        // will be expensive. Future fix: send true deltas and move layout computation to
-        // the webview, or cache the layout and recompute only when the class set changes.
-        const layout = computeCityLayout(allClasses);
+        // Layout only changes when classes are added or removed, not when bodies are edited.
+        // Cache it keyed by sorted class names to skip expensive recomputation on edits.
+        const layoutKey = allClasses.map(c => c.Classname).sort().join(',');
+        if (layoutKey !== this._cachedLayoutKey || !this._cachedLayout) {
+            this._cachedLayout = computeCityLayout(allClasses);
+            this._cachedLayoutKey = layoutKey;
+        }
+        const layout = this._cachedLayout;
         const graph = buildGraph(allClasses);
         const changedNames = changedClasses.map(c => c.Classname);
         const relatedNames = getRelated([...changedNames, ...removedNames], graph);

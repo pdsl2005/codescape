@@ -429,7 +429,10 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       this.controls?.update();
       if (this.renderer && this.scene && this.camera) {
         this.renderer.render(this.scene, this.camera);
-        this.labelRenderer?.render(this.scene, this.camera);
+        // CSS2D label rendering is only needed when a UML panel is open
+        if (this.openLabel !== null) {
+          this.labelRenderer?.render(this.scene, this.camera);
+        }
       }
     };
     loop();

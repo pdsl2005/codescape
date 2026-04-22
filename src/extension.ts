@@ -71,8 +71,11 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const outputPath = path.join(workspaceFolders[0].uri.fsPath, "codescape-output.json");
-      const outputUri = vscode.Uri.file(outputPath);
+      const wsUri = workspaceFolders[0].uri;
+      const codescapesUri = vscode.Uri.joinPath(wsUri, ".codescapes");
+      await vscode.workspace.fs.createDirectory(codescapesUri);
+      const outputUri = vscode.Uri.joinPath(codescapesUri, "codescape-output.json");
+      const outputPath = outputUri.fsPath;
       const exportData = {
         exportedAt: new Date().toISOString(),
         totalFiles: snap.length,
@@ -213,6 +216,7 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   '**/.git/**',
   '**/.vscode-test/**',
   '**/codescape-json/**',
+  '**/.codescapes/**',
   '**/out/**',
   '**/dist/**',
   '**/build/**',

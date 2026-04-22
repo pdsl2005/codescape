@@ -38,23 +38,28 @@ export async function parsePythonFile(uri: vscode.Uri): Promise<ClassInfo[]> {
 }
 
 /**
- * Export parsed ClassInfo data to a JSON file next to the source file.
- * For example: Test.java → Test.json, script.py -> script.json
+ * Export parsed ClassInfo data to .codescapes/<mirrored-path>.json in the workspace root.
+ * For example: src/Foo.java → .codescapes/src/Foo.json
  */
 async function exportParseResultsAsJson(uri: vscode.Uri, classInfo: ClassInfo[]): Promise<void> {
   try {
-    const sourceFilePath = uri.fsPath;
-    const parsedPath = path.parse(sourceFilePath);
-    const jsonFilePath = path.join(parsedPath.dir, `${parsedPath.name}.json`);
-    const jsonUri = vscode.Uri.file(jsonFilePath);
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) { return; }
+
+    const wsUri = workspaceFolders[0].uri;
+    const relativePosix = path.posix.relative(wsUri.path, uri.path);
+    const parsed = path.posix.parse(relativePosix);
+    const jsonRelative = path.posix.join(parsed.dir, `${parsed.name}.json`);
+    const jsonUri = vscode.Uri.joinPath(wsUri, '.codescapes', jsonRelative);
+
+    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(jsonUri, '..'));
     const jsonContent = JSON.stringify({
-      sourceFile: path.basename(sourceFilePath),
+      sourceFile: path.posix.basename(uri.path),
       parsedAt: new Date().toISOString(),
       classes: classInfo
     }, null, 2);
-    const encoder = new TextEncoder();
-    await vscode.workspace.fs.writeFile(jsonUri, encoder.encode(jsonContent));
-    console.log(`Exported parse results to ${jsonFilePath}`);
+    await vscode.workspace.fs.writeFile(jsonUri, new TextEncoder().encode(jsonContent));
+    console.log(`Exported parse results to ${jsonUri.toString()}`);
   } catch (err) {
     console.error('Failed to export parse results as JSON:', err);
   }

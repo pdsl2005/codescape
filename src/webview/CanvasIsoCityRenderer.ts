@@ -74,6 +74,13 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
 
   private hasInitialFit = false;
 
+  // Sorted buildings cache — rebuilt only when this.buildings changes
+  private sortedBuildings: BuildingDTO[] = [];
+  private sortedDirty = true;
+
+  // Prevents redundant refresh() calls when multiple mousemove events fire per frame
+  private rafPending = false;
+
   // Bound event handlers (so we can remove them in dispose)
   private boundOnResize: (() => void) | null = null;
   private boundOnWheel: ((e: WheelEvent) => void) | null = null;
@@ -140,6 +147,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
 
   renderCity(state: CityState): void {
     this.buildings = filesToBuildingDTOs(state.files, state.layout, state.colors);
+    this.sortedDirty = true;
     if (!this.hasInitialFit) {
       this.fitToView();
       this.hasInitialFit = true;
@@ -164,10 +172,14 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     // Draw grid — offset is 0,0 since vt handles positioning
     this.drawIsoGrid(ctx, rows, cols, this.TILE_L, 0, 0);
 
-    // Sort buildings by depth (back to front)
-    const sorted = [...this.buildings].sort(
-      (a, b) => a.col + a.row - (b.col + b.row),
-    );
+    // Sort buildings by depth (back to front) — cached between pans/zooms
+    if (this.sortedDirty) {
+      this.sortedBuildings = [...this.buildings].sort(
+        (a, b) => a.col + a.row - (b.col + b.row),
+      );
+      this.sortedDirty = false;
+    }
+    const sorted = this.sortedBuildings;
 
     // Draw buildings and record bounding boxes for hit-testing
     this.buildingBounds = [];
@@ -498,6 +510,15 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   // PRIVATE — Event binding
   // =========================================================================
 
+  private scheduleRefresh(): void {
+    if (this.rafPending) return;
+    this.rafPending = true;
+    requestAnimationFrame(() => {
+      this.rafPending = false;
+      this.refresh();
+    });
+  }
+
   private bindEvents(): void {
     if (!this.canvas) return;
 
@@ -556,7 +577,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
       this.vt.y += e.clientY - this.prevY;
       this.prevX = e.clientX;
       this.prevY = e.clientY;
-      this.refresh();
+      this.scheduleRefresh();
     };
 
     this.boundOnMouseDown = (e: MouseEvent) => {
