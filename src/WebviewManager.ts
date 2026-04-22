@@ -51,6 +51,19 @@ export class WebviewManager {
         return panel;
     }
 
+    registerExplorerView(view: vscode.WebviewView): void {
+        view.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [
+                vscode.Uri.joinPath(this.extensionUri, 'src', 'webview'),
+                vscode.Uri.joinPath(this.extensionUri, 'out', 'webview'),
+                vscode.Uri.joinPath(this.extensionUri, 'media'),
+            ],
+        };
+        view.webview.html = this.getWebviewContent(view.webview);
+        this.addWebview(view, 'explorer');
+    }
+
     addWebview(container: WebviewContainer, location: ViewLocation = 'explorer'): void {
         const managedWebview: ManagedWebview = {
             container,
@@ -165,7 +178,7 @@ export class WebviewManager {
     }
 
     private generateViewId(): string {
-        return `view_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return `view_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     }
 
     private getWebviewContent(webview: vscode.Webview): string {

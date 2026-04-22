@@ -123,4 +123,39 @@ suite('Extension Test Suite', () => {
       });
     }
   });
+
+  test('registerExplorerView replays lastFullState immediately on registration', async () => {
+    const postedMessages: unknown[] = [];
+
+    const fakeView = {
+      viewType: 'codescape.Cityview',
+      webview: {
+        html: '',
+        options: {},
+        onDidReceiveMessage: (_handler: (msg: unknown) => void) =>
+          new vscode.Disposable(() => {}),
+        postMessage: async (msg: unknown) => {
+          postedMessages.push(msg);
+          return true;
+        },
+        asWebviewUri: (uri: vscode.Uri) => uri,
+      },
+      onDidDispose: (_cb: () => void) => new vscode.Disposable(() => {}),
+    };
+
+    const manager = new WebviewManager(vscode.Uri.file(process.cwd()));
+
+    const classes = loadEntitiesFromFixtures();
+    const layout = computeCityLayout(classes);
+    manager.broadcastFullState({ classes, layout, status: 'ready' });
+
+    assert.strictEqual(postedMessages.length, 0, 'no messages before registration');
+
+    manager.registerExplorerView(fakeView as unknown as vscode.WebviewView);
+
+    assert.ok(postedMessages.length > 0, 'explorer view should receive replayed state immediately');
+    const fullStateMsg = postedMessages.find((m: any) => m.type === 'FULL_STATE');
+    assert.ok(fullStateMsg, 'expected a FULL_STATE replay message');
+    assert.strictEqual((fullStateMsg as any).payload.status, 'ready');
+  });
 });

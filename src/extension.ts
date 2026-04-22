@@ -24,7 +24,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const javaWatcher = new JavaFileWatcher(store, webviewManager);
   await initializeParser();
 
-  const provider = new CodescapeViewProvider(context.extensionUri, webviewManager);
+  const provider = new CodescapeViewProvider(webviewManager);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("codescape.Cityview", provider)
   );
@@ -268,65 +268,11 @@ export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
 
 // sidebar view
 class CodescapeViewProvider implements vscode.WebviewViewProvider {
-  constructor(private readonly extensionUri: vscode.Uri, private readonly webviewManager: WebviewManager) { }
+  constructor(private readonly webviewManager: WebviewManager) { }
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     console.log('resolveWebviewView called, view id:', webviewView.viewType);
-
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(this.extensionUri, 'src', 'webview'),
-        vscode.Uri.joinPath(this.extensionUri, 'out', 'webview'),
-        vscode.Uri.joinPath(this.extensionUri, 'media'),
-      ]
-    };
-    webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
-    this.webviewManager.addWebview(webviewView, 'explorer');
+    this.webviewManager.registerExplorerView(webviewView);
   }
-}
-
-// new canvas-based city visualization that renders an isometric grid and buildings from AST data
-export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
-  const bundleUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "out", "webview", "webviewBundle.js"),
-  );
-  const imagesUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "media", "images"),
-  );
-
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <style>
-        body { margin: 0; overflow: hidden; }
-        #city-container { width: 100vw; height: 100vh; }
-        #toggle-view-btn {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          z-index: 10;
-          padding: 4px 10px;
-          background: var(--vscode-button-background, #0e639c);
-          color: var(--vscode-button-foreground, #fff);
-          border: none;
-          border-radius: 3px;
-          cursor: pointer;
-          font-size: 12px;
-        }
-        #toggle-view-btn:hover {
-          background: var(--vscode-button-hoverBackground, #1177bb);
-        }
-      </style>
-    </head>
-    <body>
-      <div id="city-container"></div>
-      <button id="toggle-view-btn">Switch to 3D</button>
-      <script>window.CODESCAPE_IMAGES_URI = "${imagesUri}";</script>
-      <script src="${bundleUri}"></script>
-    </body>
-    </html>
-  `;
 }
 
 export function deactivate() { }
