@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BuildingDTO, UmlClassData } from './types';
 // @ts-ignore
-import { createBuildingFromDTO } from '../../media/renderer3.js';
+import { createBuildingFromDTO, updateUmlLabel } from '../../media/renderer3.js';
 
 export type BuildingType = 'house' | 'apartment' | 'skyscraper';
 
@@ -44,6 +44,9 @@ export class Building {
     this.group.position.set(dto.col, 0, dto.row);
     const { umlLabel, isBuilding } = this.group.userData as Record<string, unknown>;
     this.group.userData = { ...dto, isBuilding, umlLabel, texturePath: this.texturePath };
+    if (umlLabel) {
+      updateUmlLabel(umlLabel as { element: HTMLElement; position: { set(x: number, y: number, z: number): void } }, dto);
+    }
   }
 
   texturePathForRebuild(dto: BuildingDTO): string | undefined {
