@@ -306,6 +306,11 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     if (this.openLabel) {
       this.openLabel.visible = false;
       this.openLabel = null;
+      // Flush visibility change to the DOM — the animation loop skips CSS2D renders
+      // when no label is open, so we do one immediate pass here.
+      if (this.labelRenderer && this.scene && this.camera) {
+        this.labelRenderer.render(this.scene, this.camera);
+      }
     }
     this.selectedGroup = null;
     this.selectedBuilding = null;
