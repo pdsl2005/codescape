@@ -1,88 +1,71 @@
-# Codescape
+# Codescape — Code City Visualizer
 
-Codescape is a VS Code extension that parses Java and Python code and renders it as an isometric city.
+Codescape transforms your Java and Python codebase into a living isometric 3D city right inside VS Code. Each building is a class or interface; its height reflects complexity (methods + fields). Watch the city update in real time as you edit your code.
 
-- Buildings represent classes/interfaces.
-- Height is based on methods + fields.
-- The view updates from file watcher events via partial-state messages.
+## Features
 
-## Current Status
+| Area | Status |
+|---|---|
+| Java parsing (Tree-sitter) | Implemented — classes, interfaces, inner classes, methods, fields, constructors |
+| Python parsing (Tree-sitter) | Implemented — classes, module nodes, methods, fields, inheritance, inner classes |
+| Relationship graph | Implemented — extends/implements/field/constructor dependencies |
+| Incremental live updates | Implemented — file watcher emits partial-state messages |
+| Explorer sidebar view | Implemented — `Codescape City` in the Explorer panel |
+| Panel views | Implemented — side panel, bottom panel, and editor tab |
+| Pan/rotation controls | Planned — zoom-only camera controls in current release |
 
-Active prototype with working parser, watcher, relationship graph, and canvas renderer.
+## Getting Started
 
-## Feature Status
+1. Install **Codescape** from the VS Code Marketplace.
+2. Open a Java or Python project folder.
+3. Open the **Codescape City** view in the Explorer sidebar, or run one of the commands below from the Command Palette (`Cmd/Ctrl+Shift+P`).
 
-| Area | Status | Notes |
-|---|---|---|
-| Java parsing (Tree-sitter) | Implemented | Classes/interfaces, inner classes, methods, fields, constructors |
-| Python parsing (Tree-sitter) | Implemented | Classes, module nodes, methods, fields, inheritance, inner classes |
-| Relationship graph | Implemented | Extends/implements/field/ctor dependencies |
-| Incremental updates | Implemented | Watcher emits `PARTIAL_STATE` |
-| Explorer webview | Implemented | `codescape.Cityview` |
-| Panel webview | Implemented | Side (`codescape.createSidePanel`), bottom (`codescape.createBottomPanel`), editor tab (`codescape.createPanel`) |
-| Auto-layout abstraction (`src/layout/placer.ts`) | Partial | Exists/tests pass, not wired into live renderer |
-| Message contract typing (`src/types/messages.ts`) | Implemented | Used by `WebviewManager`/`JavaFileWatcher`; includes `layout`, `fullClasses`, and updated status values |
-| Pan/rotation controls | Not implemented | Zoom-only camera controls |
+The city renders automatically on first open and updates incrementally as you save files.
+
+## Commands
+
+| Command | Description |
+|---|---|
+| `Codescape: Open in Side Panel` | Open the city view in the side panel |
+| `Codescape: Open in Bottom Panel` | Open the city view in the bottom panel |
+| `Create Panel` | Open the city view in an editor tab |
+| `Codescape Scan` | Manually trigger a workspace scan |
+
+## Known Limitations
+
+- Pan and rotation are not yet implemented — use scroll to zoom.
+- Large workspaces with thousands of classes may affect rendering performance.
 
 ## Documentation
 
 - [Usage Guide](docs/USAGE.md)
 - [Architecture Reference](docs/ARCHITECTURE.md)
 
-## Quick Start
+## Development
 
-1. Install dependencies:
+Clone the repo and build locally:
+
 ```bash
 npm install
-```
-2. Compile:
-```bash
 npm run compile
 ```
-3. Launch extension host (`F5` in VS Code).
-4. In the extension host window:
-   - Open the explorer view `Codescape City` in the sidebar, or
-   - Run command `Create Panel` (`codescape.createPanel`) from the command palette.
 
-Known-good example workspaces:
+Launch the extension host with `F5` in VS Code, then open one of the example workspaces:
 - `examples/java-city`
 - `examples/python-city`
 
-## Development
-
-- Watch compile:
+Other dev commands:
 ```bash
-npm run watch
+npm run watch   # watch + rebuild on change
+npm run lint    # ESLint
+npm test        # compile + lint + VS Code extension tests
+npm run package # produce a .vsix for local install
 ```
-- Lint:
-```bash
-npm run lint
-```
-- Tests:
-```bash
-npm test
-```
-
-Test notes:
-- `npm test` runs compile + lint + VS Code extension tests.
-- In offline/restricted environments, `vscode-test` may be flaky depending on local VS Code test host availability.
-
-## Commands
-
-Contributed commands:
-- `codescape.createPanel` — open city in an editor tab
-- `codescape.createSidePanel` — open city in the side panel
-- `codescape.createBottomPanel` — open city in the bottom panel
-- `codescape.scan` (`Codescape Scan`) — manually trigger a workspace scan
-
-Runtime-registered internal commands:
-- `codescape.dumpParseStore`
-- `codescape.exportParseStore`
 
 ## Contributing
 
 1. Keep runtime message contracts synchronized between extension/watcher/frontend/types.
-2. Prefer small, test-backed PRs (parser, relations, watcher, and layout have existing test suites).
+2. Prefer small, test-backed PRs — parser, relations, watcher, and layout all have existing test suites.
 3. Update [Usage Guide](docs/USAGE.md) and [Architecture Reference](docs/ARCHITECTURE.md) when behavior changes.
 
 ## License
