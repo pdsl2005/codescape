@@ -1,7 +1,24 @@
 // src/webview/ThreeJsCityRenderer.ts
-// SCRUM-172 — Three.js renderer implementing ICityRenderer
+// Implements ICityRenderer using the JS building creators from media/renderer3.js.
+// This file owns the TS orchestration (scene, camera, controls, messaging loop)
+// and delegates all building mesh creation to renderer3.js — no duplication.
 
-import * as THREE from "three";
+import * as THREE from 'three';
+import { OrbitControls } from 'https://unpkg.com/three@0.141.0/examples/jsm/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'https://unpkg.com/three@0.141.0/examples/jsm/renderers/CSS2DRenderer.js';
+
+// Building creators from the JS prototype — imported as-is, not rewritten in TS.
+// esbuild.webview.mjs has a cdnRedirectPlugin that resolves the CDN imports
+// inside renderer3.js to the local node_modules/three copy at bundle time.
+// @ts-ignore
+import {
+  createLights,
+  createGround,
+  createGrid,
+  createBuildingFromDTO,
+  disposeTextureCache,
+} from "../../media/renderer3.js";
+
 import { ICityRenderer } from "./ICityRenderer";
 import {
   CityState,
@@ -12,25 +29,34 @@ import {
   filesToBuildingDTOs,
 } from "./types";
 
-const TILE_SIZE = 60;
-const FLOOR_HEIGHT = 8;
+const INITIAL_GRID_SIZE = 20;
 
 export class ThreeJsCityRenderer implements ICityRenderer {
   status: RendererStatus = "uninitialized";
 
+  // UML selection state — mirrors selectedBuilding / openLabel in main3.js
+  selectedBuilding: HitTestResult | null = null;
+
   private renderer: THREE.WebGLRenderer | null = null;
+  private labelRenderer: CSS2DRenderer | null = null;
   private scene: THREE.Scene | null = null;
   private camera: THREE.PerspectiveCamera | null = null;
+  private controls: OrbitControls | null = null;
   private raycaster = new THREE.Raycaster();
   private container: HTMLElement | null = null;
   private events: RendererEvents = {};
+  private animFrameId: number | null = null;
 
-  // Mesh registry keyed by file name for efficient add/update/remove
-  private buildingMeshes = new Map<string, THREE.Mesh>();
+  private openLabel: CSS2DObject | null = null;
+  private selectedGroup: THREE.Object3D | null = null;
 
-  // =========================================================================
-  // LIFECYCLE
-  // =========================================================================
+  // Groups keyed by class name — used for incremental add/remove in renderCity
+  private buildingGroups = new Map<string, THREE.Object3D>();
+
+  // Persistent scene objects that must be disposed with the renderer
+  private worldObjects: THREE.Object3D[] = [];
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   init(container: HTMLElement, events?: RendererEvents): void {
     this.container = container;
@@ -39,70 +65,99 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
 
-    // Renderer — preserveDrawingBuffer required for toDataURL()
-    this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      preserveDrawingBuffer: true,
-    });
+    // WebGL renderer (preserveDrawingBuffer for toDataURL export)
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.shadowMap.enabled = true;
     container.appendChild(this.renderer.domElement);
+
+    // CSS2D renderer for UML popup labels (matches main3.js labelRenderer setup)
+    this.labelRenderer = new CSS2DRenderer();
+    this.labelRenderer.setSize(width, height);
+    this.labelRenderer.domElement.style.cssText =
+      "position:absolute;top:0;left:0;pointer-events:none;z-index:10";
+    container.appendChild(this.labelRenderer.domElement);
 
     // Scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color("#1a1a2e");
+    this.scene.background = new THREE.Color(0xf2f2f2);
 
-    // Camera — positioned above and at an angle to see the city
-    this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
-    this.camera.position.set(300, 400, 300);
-    this.camera.lookAt(0, 0, 0);
+    // Camera (matches main3.js)
+    this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+    this.camera.position.set(12, 12, 12);
 
-    // Lights
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-    this.scene.add(ambient);
+    // OrbitControls with damping (matches main3.js)
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
+    this.controls.target.set(INITIAL_GRID_SIZE / 2, 0, INITIAL_GRID_SIZE / 2);
 
-    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
-    sun.position.set(200, 400, 200);
-    sun.castShadow = true;
-    this.scene.add(sun);
+    // World setup — store returned objects so dispose() can clean them up
+    const lights = createLights(this.scene);
+    const ground = createGround(this.scene, INITIAL_GRID_SIZE);
+    const grid = createGrid(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
+    this.worldObjects = [...lights, ground, grid];
 
-    // Ground plane
-    const groundGeo = new THREE.PlaneGeometry(2000, 2000);
-    const groundMat = new THREE.MeshStandardMaterial({ color: "#2c2c2c" });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    this.scene.add(ground);
+    this.renderer.domElement.addEventListener("click", this.onSceneClick);
 
     this.status = "ready";
     this.events.onReady?.();
-    this.renderFrame();
+    this.startLoop();
   }
 
   dispose(): void {
-    this.buildingMeshes.forEach((mesh) => {
-      (mesh.geometry as THREE.BufferGeometry).dispose();
-      (mesh.material as THREE.Material).dispose();
-      this.scene?.remove(mesh);
-    });
-    this.buildingMeshes.clear();
+    this.stopLoop();
+    this.renderer?.domElement.removeEventListener("click", this.onSceneClick);
 
+    this.buildingGroups.forEach((group) => {
+      this.disposeGroup(group);
+      this.scene?.remove(group);
+    });
+    this.buildingGroups.clear();
+
+    this.worldObjects.forEach((obj) => {
+      this.scene?.remove(obj);
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.LineSegments) {
+        obj.geometry?.dispose();
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        (mats as THREE.Material[]).forEach((m) => m?.dispose());
+      }
+    });
+    this.worldObjects = [];
+
+    disposeTextureCache();
+
+    if (this.labelRenderer && this.container) {
+      this.container.removeChild(this.labelRenderer.domElement);
+    }
     if (this.renderer && this.container) {
       this.container.removeChild(this.renderer.domElement);
       this.renderer.dispose();
     }
 
     this.renderer = null;
+    this.labelRenderer = null;
     this.scene = null;
     this.camera = null;
+    this.controls = null;
     this.container = null;
     this.status = "disposed";
   }
 
-  // =========================================================================
-  // RENDERING
-  // =========================================================================
+  private disposeGroup(group: THREE.Object3D): void {
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry?.dispose();
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        (mats as THREE.Material[]).forEach((m) => m?.dispose());
+      }
+      const c = child as any;
+      if (c.isCSS2DObject && c.element instanceof HTMLElement) {
+        c.element.remove();
+      }
+    });
+  }
+
+  // ── Rendering ──────────────────────────────────────────────────────────────
 
   renderCity(state: CityState): void {
     if (!this.scene) return;
@@ -114,116 +169,97 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     );
 
     // Remove buildings no longer in state
-    for (const [key, mesh] of this.buildingMeshes) {
+    for (const [key, group] of this.buildingGroups) {
       if (!incoming.has(key)) {
-        this.scene.remove(mesh);
-        (mesh.geometry as THREE.BufferGeometry).dispose();
-        (mesh.material as THREE.Material).dispose();
-        this.buildingMeshes.delete(key);
+        this.disposeGroup(group);
+        this.scene.remove(group);
+        this.buildingGroups.delete(key);
       }
     }
 
-    // Add or update buildings
+    // Add new buildings — delegates to createBuildingFromDTO in renderer3.js
     for (const [key, dto] of incoming) {
-      const existing = this.buildingMeshes.get(key);
-      const floors = Math.max(1, dto.floors);
-      const buildingHeight = floors * FLOOR_HEIGHT;
-      const x = dto.col * TILE_SIZE;
-      const z = dto.row * TILE_SIZE;
-
-      if (existing) {
-        // Update in place — no new geometry allocation
-        existing.position.set(x, buildingHeight / 2, z);
-        existing.scale.y = floors;
-        (existing.material as THREE.MeshStandardMaterial).color.set(dto.color);
-      } else {
-        // One floor unit tall, scaled by floor count
-        const geometry = new THREE.BoxGeometry(
-          TILE_SIZE * 0.8,
-          FLOOR_HEIGHT,
-          TILE_SIZE * 0.8
-        );
-        const material = new THREE.MeshStandardMaterial({ color: dto.color });
-        const mesh = new THREE.Mesh(geometry, material);
-
-        mesh.position.set(x, buildingHeight / 2, z);
-        mesh.scale.y = floors;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-
-        // Store file + position for hitTest
-        mesh.userData = {
-          file: {
-            name: dto.name ?? "",
-            lines: dto.lines ?? 0,
-            functions: dto.functions ?? 0,
-            classes: dto.classes ?? 0,
-          },
-          position: { col: dto.col, row: dto.row },
-        };
-
-        this.scene.add(mesh);
-        this.buildingMeshes.set(key, mesh);
+      if (!this.buildingGroups.has(key)) {
+        const group = createBuildingFromDTO(dto);
+        this.scene.add(group);
+        this.buildingGroups.set(key, group);
       }
     }
 
     this.status = "ready";
-    this.renderFrame();
   }
 
   refresh(): void {
-    this.renderFrame();
+    // The animation loop handles continuous redraws; nothing extra needed.
   }
 
-  // =========================================================================
-  // VIEWPORT CONTROLS
-  // =========================================================================
+  // ── Viewport Controls ──────────────────────────────────────────────────────
 
   resize(width: number, height: number): void {
-    if (!this.camera || !this.renderer) return;
+    if (!this.camera || !this.renderer || !this.labelRenderer) return;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
-    this.renderFrame();
+    this.labelRenderer.setSize(width, height);
   }
 
   zoom(delta: number): void {
     if (!this.camera) return;
     this.camera.position.multiplyScalar(delta > 0 ? 0.9 : 1.1);
-    this.renderFrame();
   }
 
   resetView(): void {
-    if (!this.camera) return;
-    this.camera.position.set(300, 400, 300);
-    this.camera.lookAt(0, 0, 0);
-    this.renderFrame();
+    if (!this.camera || !this.controls) return;
+    // Matches the R-key handler in main3.js
+    this.camera.position.set(12, 12, 12);
+    this.controls.target.set(INITIAL_GRID_SIZE / 2, 0, INITIAL_GRID_SIZE / 2);
+    this.controls.update();
   }
 
-  // =========================================================================
-  // INTERACTION
-  // =========================================================================
+  // ── Interaction ────────────────────────────────────────────────────────────
 
   hitTest(x: number, y: number): HitTestResult | null {
     if (!this.camera || !this.renderer) return null;
-
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((x - rect.left) / rect.width) * 2 - 1,
       -((y - rect.top) / rect.height) * 2 + 1
     );
-
     this.raycaster.setFromCamera(ndc, this.camera);
-    const meshes = Array.from(this.buildingMeshes.values());
-    const hits = this.raycaster.intersectObjects(meshes);
-
+    const hits = this.raycaster.intersectObjects(
+      Array.from(this.buildingGroups.values()), true
+    );
     if (hits.length === 0) return null;
-    return hits[0].object.userData as HitTestResult;
+    const root = this.findBuildingRoot(hits[0].object);
+    return root ? (root.userData as HitTestResult) : null;
   }
 
-  // =========================================================================
-  // EXPORT
-  // =========================================================================
+  /** Show the CSS2D UML panel for a building. Mirrors openUmlFor() in main3.js. */
+  openUml(result: HitTestResult): void {
+    const key = result.file?.name ?? "";
+    const group = this.buildingGroups.get(key);
+    if (!group) return;
+    this.closeUml();
+    const label = group.userData?.umlLabel as CSS2DObject | undefined;
+    if (label) {
+      label.visible = true;
+      this.openLabel = label;
+      this.selectedGroup = group;
+      this.selectedBuilding = result;
+    }
+  }
+
+  /** Hide the current UML panel and clear selection. Mirrors closeCurrentUml() in main3.js. */
+  closeUml(): void {
+    if (this.openLabel) {
+      this.openLabel.visible = false;
+      this.openLabel = null;
+    }
+    this.selectedGroup = null;
+    this.selectedBuilding = null;
+  }
+
+  // ── Export ─────────────────────────────────────────────────────────────────
 
   toImageDataUrl(): string {
     if (!this.renderer || !this.scene || !this.camera) return "";
@@ -231,12 +267,66 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     return this.renderer.domElement.toDataURL("image/png");
   }
 
-  // =========================================================================
-  // PRIVATE
-  // =========================================================================
+  // ── Private ────────────────────────────────────────────────────────────────
 
-  private renderFrame(): void {
-    if (!this.renderer || !this.scene || !this.camera) return;
-    this.renderer.render(this.scene, this.camera);
+  /** Mirrors findBuildingRoot() in main3.js — walks up to the Group with isBuilding. */
+  private findBuildingRoot(object: THREE.Object3D | null): THREE.Object3D | null {
+    let current = object;
+    while (current) {
+      if (current.userData?.isBuilding) return current;
+      current = current.parent;
+    }
+    return null;
   }
+
+  private startLoop(): void {
+    // Mirrors the animate() function in main3.js
+    const loop = () => {
+      this.animFrameId = requestAnimationFrame(loop);
+      this.controls?.update();
+      if (this.renderer && this.scene && this.camera) {
+        this.renderer.render(this.scene, this.camera);
+        this.labelRenderer?.render(this.scene, this.camera);
+      }
+    };
+    loop();
+  }
+
+  private stopLoop(): void {
+    if (this.animFrameId !== null) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
+  }
+
+  /** Mirrors onSceneClick() in main3.js — raycasts and toggles UML popup. */
+  private onSceneClick = (event: MouseEvent): void => {
+    if (!this.camera || !this.renderer) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const hits = this.raycaster.intersectObjects(
+      Array.from(this.buildingGroups.values()), true
+    );
+
+    if (hits.length === 0) { this.closeUml(); return; }
+
+    const clickedGroup = this.findBuildingRoot(hits[0].object);
+    if (!clickedGroup) { this.closeUml(); return; }
+
+    // Toggle: clicking the same building closes it (matches main3.js behavior)
+    if (this.selectedGroup === clickedGroup) { this.closeUml(); return; }
+
+    const dto = clickedGroup.userData as BuildingDTO;
+    const result: HitTestResult = {
+      file: { name: dto.name ?? `${dto.col}_${dto.row}`, lines: dto.lines ?? 0, functions: dto.functions ?? 0, classes: dto.classes ?? 0 },
+      position: { col: dto.col, row: dto.row },
+    };
+    this.closeUml();
+    this.openUml(result);
+    this.events.onBuildingClick?.(result);
+  };
 }

@@ -1,28 +1,30 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'https://unpkg.com/three@0.141.0/examples/jsm/renderers/CSS2DRenderer.js';
 
-const houseTextures = [
-  "./images/house.png",
-  "./images/house2.png",
-  "./images/house3.png"
-];
+let _imageBase = './images';
 
-const apartmentTextures = [
-  "./images/apt.png",
-  "./images/apt2.png",
-  "./images/apt3.png",
-  "./images/apt4.png",
-  "./images/apt5.png"
-];
+export function setImageBasePath(base) {
+  _imageBase = base.replace(/\/$/, '');
+}
 
-const skyscraperTextures = [
-  "./images/skyscraper.png",
-  "./images/skyscraper2.png",
-  "./images/skyscraper3.png",
-  "./images/skyscraper4.png",
-  "./images/skyscraper5.png",
-  "./images/skyscraper6.png"
-];
+function img(filename) {
+  return [_imageBase, filename].join('/');
+}
+
+function houseTextures() {
+  return [img('house.png'), img('house2.png'), img('house3.png')];
+}
+
+function apartmentTextures() {
+  return [img('apt.png'), img('apt2.png'), img('apt3.png'), img('apt4.png'), img('apt5.png')];
+}
+
+function skyscraperTextures() {
+  return [
+    img('skyscraper.png'), img('skyscraper2.png'), img('skyscraper3.png'),
+    img('skyscraper4.png'), img('skyscraper5.png'), img('skyscraper6.png'),
+  ];
+}
 
 export function createLights(scene) {
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
@@ -31,30 +33,49 @@ export function createLights(scene) {
   const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
   directionalLight.position.set(10, 20, 10);
   scene.add(directionalLight);
+
+  return [ambientLight, directionalLight];
 }
 
 export function createGround(scene, size) {
   const groundGeometry = new THREE.PlaneGeometry(size, size);
-  const groundMaterial = new THREE.MeshStandardMaterial({
-    color: 0xe8e8e8
-  });
+  const groundMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e8e8 });
 
   const ground = new THREE.Mesh(groundGeometry, groundMaterial);
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(size / 2 - 0.5, 0, size / 2 - 0.5);
 
   scene.add(ground);
+  return ground;
 }
 
 var gridSize = 1;
 
 export function createGrid(scene, size, divisions) {
-    const cellSize = gridSize;
-    size = cellSize * divisions;
+  const cellSize = gridSize;
+  size = cellSize * divisions;
   const grid = new THREE.GridHelper(size, divisions, 0x777777, 0xaaaaaa);
   grid.position.set(size / 2 - cellSize / 2, 0.01, size / 2 - cellSize / 2);
 
   scene.add(grid);
+  return grid;
+}
+
+const _loader = new THREE.TextureLoader();
+const _textureCache = new Map();
+
+function loadTexture(path) {
+  if (_textureCache.has(path)) { return _textureCache.get(path); }
+  const tex = _loader.load(path);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  _textureCache.set(path, tex);
+  return tex;
+}
+
+export function disposeTextureCache() {
+  _textureCache.forEach((tex) => tex.dispose());
+  _textureCache.clear();
 }
 
 function getRandomTexture(textureArray) {
@@ -63,12 +84,9 @@ function getRandomTexture(textureArray) {
 
 // basic block per floor
 export function createBoxBlock(width, height, depth, color, texturePath) {
-  const loader = new THREE.TextureLoader();
-  const tex = loader.load(texturePath);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
+  const tex = loadTexture(texturePath);
   const geometry = new THREE.BoxGeometry(width, height, depth);
-  const sideMat = new THREE.MeshStandardMaterial({map: tex});
+  const sideMat = new THREE.MeshStandardMaterial({ map: tex, color: new THREE.Color(color) });
   const topBottom = new THREE.MeshStandardMaterial({
     color: new THREE.Color(color)
   });
@@ -102,7 +120,7 @@ export function createHouse(dto) {
   const bodyDepth = gridSize;
   const floorHeight = gridSize;
 
-  const texture = getRandomTexture(houseTextures);
+  const texture = getRandomTexture(houseTextures());
 
   // stack block depending on the floor height 
   for (let i = 0; i < dto.floors; i++) {
@@ -120,7 +138,7 @@ export function createHouse(dto) {
   group.position.set(dto.col, 0, dto.row);
   group.userData = dto;
 
-  return attachUmlToGroup(group, dto); // changed this line - heewon
+  return attachUmlToGroup(group, dto);
 }
 
 // create apt 
@@ -131,7 +149,7 @@ export function createApartment(dto) {
   const bodyDepth = gridSize;
   const floorHeight = gridSize;
 
-  const texture = getRandomTexture(apartmentTextures);
+  const texture = getRandomTexture(apartmentTextures());
 
   for (let i = 0; i < dto.floors; i++) {
     const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#87AE73", texture);
@@ -153,7 +171,7 @@ export function createSkyscraper(dto) {
   const bodyDepth = 1.0;
   const floorHeight = 1.0;
   
-  const texture = getRandomTexture(skyscraperTextures);
+  const texture = getRandomTexture(skyscraperTextures());
 
   for (let i = 0; i < dto.floors; i++) {
     const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#82CAFF", texture);

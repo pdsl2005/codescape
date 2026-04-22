@@ -2,6 +2,8 @@ import { RendererRegistry } from "./ICityRenderer";
 import { CanvasIsoCityRenderer } from "./CanvasIsoCityRenderer";
 import { ThreeJsCityRenderer } from "./ThreeJsCityRenderer";
 import { CityState, FileData } from "./types";
+// @ts-ignore
+import { setImageBasePath } from "../../media/renderer3.js";
 
 // Declare the VS Code API (available in webview context)
 declare function acquireVsCodeApi(): {
@@ -11,6 +13,11 @@ declare function acquireVsCodeApi(): {
 };
 
 const vscode = acquireVsCodeApi();
+
+const injectedImagesUri = (window as any).CODESCAPE_IMAGES_URI;
+if (injectedImagesUri) {
+  setImageBasePath(injectedImagesUri);
+}
 
 // ── Setup ──────────────────────────────────────────────────────────────
 
@@ -34,7 +41,22 @@ const events = {
 };
 
 // Start with Canvas 2D as default
+let currentView: "canvas2d" | "threejs" = "canvas2d";
 registry.setActive("canvas2d", container, events);
+
+const toggleBtn = document.getElementById("toggle-view-btn") as HTMLButtonElement | null;
+toggleBtn?.addEventListener("click", () => {
+  currentView = currentView === "canvas2d" ? "threejs" : "canvas2d";
+  registry.setActive(currentView, container, events);
+  if (toggleBtn) {
+    toggleBtn.textContent = currentView === "canvas2d" ? "Switch to 3D" : "Switch to 2D";
+  }
+  const newRenderer = registry.getActive();
+  if (newRenderer && currentClasses.length > 0) {
+    newRenderer.renderCity(parsedClassesToCityState(currentClasses));
+  }
+  vscode.postMessage({ type: "VIEW_CHANGED", payload: currentView });
+});
 
 // ── State ──────────────────────────────────────────────────────────────
 
@@ -54,6 +76,12 @@ function parsedClassesToCityState(classes: any[]): CityState {
     lines: cls.Loc ?? 0,
     functions: cls.Methods?.length ?? 0,
     classes: 1,
+    uml: {
+      name: cls.Classname ?? "",
+      fields: (cls.Fields ?? []).map((f: any) => `${f.name}: ${f.type}`),
+      methods: (cls.Methods ?? []).map((m: any) =>
+        `${m.name}(${(m.parameters ?? []).join(", ")}): ${m.returnType ?? "void"}`),
+    },
   }));
   return { files };
 }

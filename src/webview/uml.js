@@ -1,5 +1,5 @@
 //UML class diagram renderer
-function drawUmlBox(ctx, x, y, classData, options) {
+export function drawUmlBox(ctx, x, y, classData, options) {
     const config = {
     padding: (options && options.padding) || 10,
     lineHeight: (options && options.lineHeight) || 20,

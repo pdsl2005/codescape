@@ -20,6 +20,8 @@ export class WebviewManager {
     private lastFullState: any = null;
     private messageQueue: Array<{ type: string; payload: any }> = [];
 
+    onBuildingClick?: (payload: unknown) => void;
+
     constructor(private extensionUri: vscode.Uri) { }
 
     /**
@@ -38,6 +40,7 @@ export class WebviewManager {
                 localResourceRoots: [
                     vscode.Uri.joinPath(this.extensionUri, 'src', 'webview'),
                     vscode.Uri.joinPath(this.extensionUri, 'out', 'webview'),
+                    vscode.Uri.joinPath(this.extensionUri, 'media'),
                 ],
                 retainContextWhenHidden: true,
             }
@@ -78,6 +81,8 @@ export class WebviewManager {
                         payload: this.lastFullState,
                     });
                 }
+            } else if (message.type === 'BUILDING_CLICK') {
+                this.onBuildingClick?.(message.payload);
             }
         });
 
@@ -146,13 +151,12 @@ export class WebviewManager {
      * Dispose all webviews
      */
     disposeAll(): void {
-        for (const id of this.webviews.keys()) {
-          let managed = this.webviews.get(id);
-          if(managed != null && 'dispose' in managed.container){
-              managed.container.dispose();
-              this.webviews.delete(id);
+        for (const managed of this.webviews.values()) {
+            if ('dispose' in managed.container) {
+                managed.container.dispose();
+            }
         }
-      }
+        this.webviews.clear();
     }
 
     /**
