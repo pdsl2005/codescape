@@ -3,6 +3,8 @@ import { BuildingDTO, UmlClassData } from './types';
 // @ts-ignore
 import { createBuildingFromDTO } from '../../media/renderer3.js';
 
+export type BuildingType = 'house' | 'apartment' | 'skyscraper';
+
 export class Building {
   readonly group: THREE.Object3D;
   readonly name: string;
@@ -11,6 +13,7 @@ export class Building {
   readonly functions: number;
   readonly classes: number;
   readonly uml?: UmlClassData;
+  readonly texturePath: string;
 
   constructor(group: THREE.Object3D, dto: BuildingDTO) {
     this.group = group;
@@ -20,16 +23,27 @@ export class Building {
     this.functions = dto.functions ?? 0;
     this.classes = dto.classes ?? 1;
     this.uml = dto.uml;
+    this.texturePath = (group.userData as { texturePath?: string }).texturePath ?? '';
   }
 
-  get buildingType(): 'house' | 'apartment' | 'skyscraper' {
-    if (this.floors <= 2) { return 'house'; }
-    if (this.floors <= 6) { return 'apartment'; }
+  static typeFromFloors(floors: number): BuildingType {
+    if (floors <= 2) { return 'house'; }
+    if (floors <= 6) { return 'apartment'; }
     return 'skyscraper';
+  }
+
+  get buildingType(): BuildingType {
+    return Building.typeFromFloors(this.floors);
   }
 
   needsRebuild(dto: BuildingDTO): boolean {
     return this.floors !== dto.floors || this.lines !== dto.lines;
+  }
+
+  texturePathForRebuild(dto: BuildingDTO): string | undefined {
+    return this.buildingType === Building.typeFromFloors(dto.floors)
+      ? this.texturePath
+      : undefined;
   }
 
   dispose(): void {
@@ -48,8 +62,8 @@ export class Building {
 }
 
 export class BuildingFactory {
-  create(dto: BuildingDTO): Building {
-    const group = createBuildingFromDTO(dto);
+  create(dto: BuildingDTO, texturePath?: string): Building {
+    const group = createBuildingFromDTO(dto, texturePath);
     return new Building(group, dto);
   }
 }

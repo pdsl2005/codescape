@@ -312,16 +312,17 @@ export class ThreeJsCityRenderer implements ICityRenderer {
 
   // ── Private ────────────────────────────────────────────────────────────────
 
-  private addBuilding(key: string, dto: BuildingDTO): void {
-    const building = this.buildingFactory.create(dto);
+  private addBuilding(key: string, dto: BuildingDTO, texturePath?: string): void {
+    const building = this.buildingFactory.create(dto, texturePath);
     this.scene!.add(building.group);
     this.buildingGroups.set(key, building);
   }
 
   private rebuildBuilding(key: string, dto: BuildingDTO, existing: Building): void {
+    const texturePath = existing.texturePathForRebuild(dto);
     existing.dispose();
     this.scene!.remove(existing.group);
-    this.addBuilding(key, dto);
+    this.addBuilding(key, dto, texturePath);
   }
 
   /** Mirrors findBuildingRoot() in main3.js — walks up to the Group with isBuilding. */
