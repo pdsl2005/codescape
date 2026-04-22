@@ -53,6 +53,16 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     height: number;
   }> = [];
 
+  // UML scroll state — world coordinates match drawUmlBox return values
+  private umlScrollOffset: number = 0;
+  private umlLastBounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    totalHeight: number;
+  } | null = null;
+
   // Cube image for PNG-based rendering (matches existing renderer.js)
   private cubeImg: HTMLImageElement | null = null;
 
@@ -144,10 +154,10 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     ctx.setTransform(this.vt.scale, 0, 0, this.vt.scale, this.vt.x, this.vt.y);
 
     // Calculate grid size based on buildings
-    const gridLength = this.calculateGridSize();
+    const { cols, rows } = this.calculateGridSize();
 
     // Draw grid — offset is 0,0 since vt handles positioning
-    this.drawIsoGrid(ctx, gridLength, gridLength, this.TILE_L, 0, 0);
+    this.drawIsoGrid(ctx, rows, cols, this.TILE_L, 0, 0);
 
     // Sort buildings by depth (back to front)
     const sorted = [...this.buildings].sort(
@@ -172,12 +182,22 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     }
 
     // Draw UML overlay for selected building
+    this.umlLastBounds = null;
     if (this.selectedBuildingName) {
       const bound = this.buildingBounds.find(b => b.dto.name === this.selectedBuildingName);
       if (bound?.dto.uml) {
         const umlX = bound.screenX - this.TILE_L / 2;
-        const umlY = bound.screenY - bound.height - 20;
-        drawUmlBox(ctx, umlX, umlY, bound.dto.uml);
+        const preferredUmlY = bound.screenY - bound.height - 20;
+        // Clamp the UML so its top stays in the visible canvas — otherwise
+        // tall skyscrapers push the top of the label above the viewport.
+        const topMarginScreen = 10;
+        const minUmlY = (topMarginScreen - this.vt.y) / this.vt.scale;
+        const umlY = Math.max(preferredUmlY, minUmlY);
+        const maxHeight = (this.canvas.height * 0.6) / this.vt.scale;
+        this.umlLastBounds = drawUmlBox(ctx, umlX, umlY, bound.dto.uml, {
+          maxHeight,
+          scrollOffset: this.umlScrollOffset,
+        });
       }
     }
 
@@ -198,17 +218,18 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
 
   private fitToView(): void {
     if (!this.canvas) return;
-    const gridSize = this.calculateGridSize();
+    const { cols, rows } = this.calculateGridSize();
     const maxFloors = this.buildings.length > 0
       ? Math.max(...this.buildings.map(b => b.floors))
       : 1;
 
-    // Isometric bounding box at scale=1:
-    //   horizontal span = (gridSize-1) * TILE_L
-    //   vertical span   = buildings above baseline + grid rows below
-    const gridW = (gridSize - 1) * this.TILE_L;
+    // Isometric diamond for a rectangular (cols × rows) grid:
+    //   horizontal span = (cols-1 + rows-1) * TILE_L / 2
+    //   vertical span   = (cols-1 + rows-1) * TILE_L / 4 + buildingH
+    const diag = (cols - 1) + (rows - 1);
+    const gridW = diag * this.TILE_L / 2;
     const buildingH = maxFloors * (this.TILE_L / 2);
-    const gridH = (gridSize - 1) * (this.TILE_L / 2) + buildingH;
+    const gridH = diag * this.TILE_L / 4 + buildingH;
 
     const padding = 16;
     const availW = this.canvas.width - padding * 2;
@@ -219,8 +240,12 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
       1.0,
     );
 
+    // Horizontal iso-centre of the rectangular grid
+    // (rightmost corner at col=cols-1,row=0; leftmost at col=0,row=rows-1).
+    const isoCentreX = (cols - rows) * this.TILE_L / 4;
+
     this.vt = {
-      x: this.canvas.width / 2,
+      x: this.canvas.width / 2 - isoCentreX * scale,
       y: padding + buildingH * scale,
       scale,
     };
@@ -281,15 +306,17 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   // PRIVATE — Drawing functions (moved from renderer.js)
   // =========================================================================
 
-  private calculateGridSize(): number {
+  private calculateGridSize(): { cols: number; rows: number } {
     let maxCol = 0;
     let maxRow = 0;
     for (const b of this.buildings) {
       if (b.col > maxCol) maxCol = b.col;
       if (b.row > maxRow) maxRow = b.row;
     }
-    const needed = Math.max(maxCol, maxRow) + 1;
-    return needed <= 10 ? 10 : needed;
+    return {
+      cols: Math.max(maxCol + 1, 10),
+      rows: Math.max(maxRow + 1, 10),
+    };
   }
 
   /** Draw the isometric diamond grid. From renderer.js drawIsoGrid(). */
@@ -451,6 +478,27 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     // Cursor-anchored zoom (Heewon)
     this.boundOnWheel = (e: WheelEvent) => {
       e.preventDefault();
+
+      // Intercept scroll when cursor is over a scrollable UML box
+      if (this.umlLastBounds && this.selectedBuildingName && this.canvas) {
+        const rect = this.canvas.getBoundingClientRect();
+        const worldX = (e.clientX - rect.left - this.vt.x) / this.vt.scale;
+        const worldY = (e.clientY - rect.top - this.vt.y) / this.vt.scale;
+        const b = this.umlLastBounds;
+        const overUml =
+          worldX >= b.x && worldX <= b.x + b.width &&
+          worldY >= b.y && worldY <= b.y + b.height;
+        if (overUml && b.totalHeight > b.height) {
+          const maxOffset = b.totalHeight - b.height;
+          this.umlScrollOffset = Math.max(
+            0,
+            Math.min(maxOffset, this.umlScrollOffset + e.deltaY / this.vt.scale)
+          );
+          this.refresh();
+          return;
+        }
+      }
+
       const oldScale = this.vt.scale;
       const newScale = Math.max(0.2, Math.min(4, oldScale + e.deltaY * -0.0015));
       this.vt.x = e.clientX - (e.clientX - this.vt.x) * (newScale / oldScale);
@@ -484,10 +532,12 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
         // Toggle: clicking the same building closes it
         this.selectedBuildingName =
           this.selectedBuildingName === result.file.name ? null : result.file.name;
+        this.umlScrollOffset = 0;
         this.refresh();
         this.events.onBuildingClick?.(result);
       } else {
         this.selectedBuildingName = null;
+        this.umlScrollOffset = 0;
         this.refresh();
       }
     };

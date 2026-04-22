@@ -219,20 +219,34 @@ function createUmlLabel(dto) {
     methods: []
   };
 
+  // Zero-sized anchor — CSS2DRenderer's translate(-50%,-50%) is a no-op on
+  // 0×0, so the anchor's top-left sits exactly on the projected 3D point.
+  const anchor = document.createElement("div");
+  anchor.style.width = "0";
+  anchor.style.height = "0";
+
+  // The actual UML box, anchored with its top-center at the 3D point so the
+  // label grows downward from the building roof instead of extending above it.
   const root = document.createElement("div");
+  root.style.position = "absolute";
+  root.style.top = "0";
+  root.style.left = "0";
+  root.style.transform = "translateX(-50%)";
   root.style.minWidth = "220px";
-  root.style.maxWidth = "280px";
+  root.style.maxWidth = "320px";
+  root.style.maxHeight = "60vh";
   root.style.background = "#1a1a2e";
   root.style.border = "2px solid #598BAF";
   root.style.borderRadius = "8px";
-  root.style.overflow = "hidden";
+  root.style.overflow = "hidden auto";
   root.style.color = "#d9d9d9";
   root.style.fontFamily = "monospace";
   root.style.fontSize = "13px";
   root.style.boxShadow = "0 6px 18px rgba(0,0,0,0.35)";
-  //root.style.display = "none"; 
-  root.style.pointerEvents = "none";
+  root.style.pointerEvents = "auto";
   root.style.whiteSpace = "pre-wrap";
+  root.style.wordBreak = "break-all";
+  root.addEventListener("wheel", (e) => e.stopPropagation());
 
   const header = document.createElement("div");
   header.textContent = uml.name || "Unnamed";
@@ -268,7 +282,9 @@ function createUmlLabel(dto) {
   });
   root.appendChild(methodsSection);
 
-  const label = new CSS2DObject(root);
+  anchor.appendChild(root);
+
+  const label = new CSS2DObject(anchor);
   label.visible = false;
   return label;
 }
