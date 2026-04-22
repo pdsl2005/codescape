@@ -12,29 +12,51 @@ import { BuildingNode, LayoutMap } from './types';
  */
 export function computeLayout(nodes: BuildingNode[]): LayoutMap {
   const layout: LayoutMap = {};
-  let row = 0;
   const placed = new Set<string>();
 
   // Separate top-level classes from inner classes
   const topLevel = nodes.filter(n => !n.parentClass);
   const innerClasses = nodes.filter(n => n.parentClass);
 
-  // First pass: place top-level classes using original algorithm
+  // Distribute clusters across a roughly-square 2D grid so unrelated nodes
+  // don't all stack at col=0 and appear as a diagonal line in isometric view.
+  const maxCols = Math.max(1, Math.ceil(Math.sqrt(topLevel.length)));
+  let curRow = 0;
+  let curCol = 0;
+
+  // First pass: place top-level classes
   for (const node of topLevel) {
     if (!placed.has(node.id)) {
-      // Place node
-      layout[node.id] = { col: 0, row, depth: 0 };
+      // Count unplaced neighbors to determine cluster width before placing
+      const clusterNeighbors = node.neighbors.filter(
+        n => !placed.has(n) && !innerClasses.some(ic => ic.id === n)
+      );
+      const clusterSize = 1 + clusterNeighbors.length;
+
+      // Wrap to the next row if this cluster won't fit (but always place if at col 0)
+      if (curCol > 0 && curCol + clusterSize > maxCols) {
+        curRow++;
+        curCol = 0;
+      }
+
+      layout[node.id] = { col: curCol, row: curRow, depth: 0 };
       placed.add(node.id);
-      // Place neighbors in same row
-      let col = 1;
+
+      // Place neighbors to the right in the same row
+      let col = curCol + 1;
       for (const neighbor of node.neighbors) {
         if (!placed.has(neighbor) && !innerClasses.some(ic => ic.id === neighbor)) {
-          layout[neighbor] = { col, row, depth: 0 };
+          layout[neighbor] = { col, row: curRow, depth: 0 };
           placed.add(neighbor);
           col++;
         }
       }
-      row++;
+
+      curCol += clusterSize;
+      if (curCol >= maxCols) {
+        curRow++;
+        curCol = 0;
+      }
     }
   }
 
@@ -65,9 +87,9 @@ export function computeLayout(nodes: BuildingNode[]): LayoutMap {
         placed.add(innerClass.id);
       } else {
         // Fallback: place as standalone if parent not found
-        layout[innerClass.id] = { col: 0, row, depth: 1 };
+        layout[innerClass.id] = { col: 0, row: curRow, depth: 1 };
         placed.add(innerClass.id);
-        row++;
+        curRow++;
       }
     }
   }

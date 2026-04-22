@@ -351,7 +351,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     const cx = (minX + maxX) / 2;
     const cz = (minZ + maxZ) / 2;
     const extent = Math.max(maxX - minX, maxZ - minZ, 8);
-    const dist = extent * 2.0;
+    const dist = extent * 1.2;
 
     this.camera.position.set(cx + dist, dist * ISO_Y_FACTOR, cz + dist);
     this.controls.target.set(cx, 0, cz);

@@ -3,14 +3,15 @@ import { computeLayout } from '../layout/placer';
 import { BuildingNode } from '../layout/types';
 
 suite('Layout Placer Tests', () => {
-  test('places unrelated nodes in separate rows', () => {
+  test('places unrelated nodes at distinct grid positions', () => {
     const nodes: BuildingNode[] = [
       { id: 'A', name: 'A', neighbors: [] },
       { id: 'B', name: 'B', neighbors: [] },
     ];
     const layout = computeLayout(nodes);
     assert.deepStrictEqual(layout['A'], { col: 0, row: 0, depth: 0 });
-    assert.deepStrictEqual(layout['B'], { col: 0, row: 1, depth: 0 });
+    // With 2 nodes maxCols=2, B fills the same row at col 1
+    assert.deepStrictEqual(layout['B'], { col: 1, row: 0, depth: 0 });
   });
 
   test('places related nodes next to each other', () => {
