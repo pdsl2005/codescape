@@ -225,12 +225,16 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       }
     }
 
-    // Add new buildings — delegates to createBuildingFromDTO in renderer3.js
+    // Add new buildings or rebuild existing ones whose geometry changed
     for (const [key, dto] of incoming) {
-      if (!this.buildingGroups.has(key)) {
-        const group = createBuildingFromDTO(dto);
-        this.scene.add(group);
-        this.buildingGroups.set(key, group);
+      const existing = this.buildingGroups.get(key);
+      if (existing) {
+        const prev = existing.userData as BuildingDTO;
+        if (prev.floors !== dto.floors || prev.lines !== dto.lines) {
+          this.rebuildBuilding(key, dto, existing);
+        }
+      } else {
+        this.addBuilding(key, dto);
       }
     }
 
@@ -321,6 +325,18 @@ export class ThreeJsCityRenderer implements ICityRenderer {
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
+
+  private addBuilding(key: string, dto: BuildingDTO): void {
+    const group = createBuildingFromDTO(dto);
+    this.scene!.add(group);
+    this.buildingGroups.set(key, group);
+  }
+
+  private rebuildBuilding(key: string, dto: BuildingDTO, existing: THREE.Object3D): void {
+    this.disposeGroup(existing);
+    this.scene!.remove(existing);
+    this.addBuilding(key, dto);
+  }
 
   /** Mirrors findBuildingRoot() in main3.js — walks up to the Group with isBuilding. */
   private findBuildingRoot(object: THREE.Object3D | null): THREE.Object3D | null {
