@@ -95,7 +95,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     this.scene.background = new THREE.Color(0xf2f2f2);
 
     // Camera — narrow FOV approximates the orthographic look of the 2D view
-    this.camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
+    this.camera = new THREE.PerspectiveCamera(20, width / height, 0.1, 2000);
     const gc = INITIAL_GRID_SIZE / 2 - 0.5;  // ground centre (size/2 - 0.5 offset)
     const initDist = INITIAL_GRID_SIZE * 2;
     this.camera.position.set(gc + initDist, initDist * ISO_Y_FACTOR, gc + initDist);
@@ -351,7 +351,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     const cx = (minX + maxX) / 2;
     const cz = (minZ + maxZ) / 2;
     const extent = Math.max(maxX - minX, maxZ - minZ, 8);
-    const dist = extent * 1.2;
+    const dist = extent * 2.5;
 
     this.camera.position.set(cx + dist, dist * ISO_Y_FACTOR, cz + dist);
     this.controls.target.set(cx, 0, cz);

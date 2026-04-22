@@ -50,10 +50,17 @@ export class WebviewManager {
     }
 
     /** Creates a new side panel tab and begins tracking it. */
-    createWebview(): vscode.WebviewPanel {
+    createSidePanel(): vscode.WebviewPanel {
         const panel = this.factory.createSidePanel();
         this.addWebview(panel, 'side');
         return panel;
+    }
+
+    /**
+     * @deprecated Use createSidePanel() for clarity.
+     */
+    createWebview(): vscode.WebviewPanel {
+        return this.createSidePanel();
     }
 
     /**
