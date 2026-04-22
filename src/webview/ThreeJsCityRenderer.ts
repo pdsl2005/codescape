@@ -7,17 +7,17 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
-// Building creators from the JS prototype — imported as-is, not rewritten in TS.
+// World-object creators from the JS prototype — imported as-is, not rewritten in TS.
 // esbuild.webview.mjs has a cdnRedirectPlugin that resolves the CDN imports
 // inside renderer3.js to the local node_modules/three copy at bundle time.
 import {
   createLights,
   createGround,
   createGrid,
-  createBuildingFromDTO,
   disposeTextureCache,
 } from "../../media/renderer3.js";
 
+import { Building, BuildingFactory } from "./Building";
 import { ICityRenderer } from "./ICityRenderer";
 import {
   CityState,
@@ -54,8 +54,9 @@ export class ThreeJsCityRenderer implements ICityRenderer {
   private openLabel: CSS2DObject | null = null;
   private selectedGroup: THREE.Object3D | null = null;
 
-  // Groups keyed by class name — used for incremental add/remove in renderCity
-  private buildingGroups = new Map<string, THREE.Object3D>();
+  // Buildings keyed by class name — used for incremental add/remove in renderCity
+  private buildingGroups = new Map<string, Building>();
+  private buildingFactory = new BuildingFactory();
 
   // Persistent scene objects that must be disposed with the renderer
   private worldObjects: THREE.Object3D[] = [];
@@ -147,9 +148,9 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       this.boundOnResize = null;
     }
 
-    this.buildingGroups.forEach((group) => {
-      this.disposeGroup(group);
-      this.scene?.remove(group);
+    this.buildingGroups.forEach((building) => {
+      building.dispose();
+      this.scene?.remove(building.group);
     });
     this.buildingGroups.clear();
 
@@ -191,20 +192,6 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     this.status = "disposed";
   }
 
-  private disposeGroup(group: THREE.Object3D): void {
-    group.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry?.dispose();
-        const mats = Array.isArray(child.material) ? child.material : [child.material];
-        (mats as THREE.Material[]).forEach((m) => m?.dispose());
-      }
-      const c = child as any;
-      if (c.isCSS2DObject && c.element instanceof HTMLElement) {
-        c.element.remove();
-      }
-    });
-  }
-
   // ── Rendering ──────────────────────────────────────────────────────────────
 
   renderCity(state: CityState): void {
@@ -217,10 +204,10 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     );
 
     // Remove buildings no longer in state
-    for (const [key, group] of this.buildingGroups) {
+    for (const [key, building] of this.buildingGroups) {
       if (!incoming.has(key)) {
-        this.disposeGroup(group);
-        this.scene.remove(group);
+        building.dispose();
+        this.scene.remove(building.group);
         this.buildingGroups.delete(key);
       }
     }
@@ -229,8 +216,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     for (const [key, dto] of incoming) {
       const existing = this.buildingGroups.get(key);
       if (existing) {
-        const prev = existing.userData as BuildingDTO;
-        if (prev.floors !== dto.floors || prev.lines !== dto.lines) {
+        if (existing.needsRebuild(dto)) {
           this.rebuildBuilding(key, dto, existing);
         }
       } else {
@@ -284,7 +270,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     );
     this.raycaster.setFromCamera(ndc, this.camera);
     const hits = this.raycaster.intersectObjects(
-      Array.from(this.buildingGroups.values()), true
+      Array.from(this.buildingGroups.values()).map((b) => b.group), true
     );
     if (hits.length === 0) return null;
     const root = this.findBuildingRoot(hits[0].object);
@@ -294,14 +280,14 @@ export class ThreeJsCityRenderer implements ICityRenderer {
   /** Show the CSS2D UML panel for a building. Mirrors openUmlFor() in main3.js. */
   openUml(result: HitTestResult): void {
     const key = result.file?.name ?? "";
-    const group = this.buildingGroups.get(key);
-    if (!group) return;
+    const building = this.buildingGroups.get(key);
+    if (!building) return;
     this.closeUml();
-    const label = group.userData?.umlLabel as CSS2DObject | undefined;
+    const label = building.group.userData?.umlLabel as CSS2DObject | undefined;
     if (label) {
       label.visible = true;
       this.openLabel = label;
-      this.selectedGroup = group;
+      this.selectedGroup = building.group;
       this.selectedBuilding = result;
     }
   }
@@ -327,14 +313,14 @@ export class ThreeJsCityRenderer implements ICityRenderer {
   // ── Private ────────────────────────────────────────────────────────────────
 
   private addBuilding(key: string, dto: BuildingDTO): void {
-    const group = createBuildingFromDTO(dto);
-    this.scene!.add(group);
-    this.buildingGroups.set(key, group);
+    const building = this.buildingFactory.create(dto);
+    this.scene!.add(building.group);
+    this.buildingGroups.set(key, building);
   }
 
-  private rebuildBuilding(key: string, dto: BuildingDTO, existing: THREE.Object3D): void {
-    this.disposeGroup(existing);
-    this.scene!.remove(existing);
+  private rebuildBuilding(key: string, dto: BuildingDTO, existing: Building): void {
+    existing.dispose();
+    this.scene!.remove(existing.group);
     this.addBuilding(key, dto);
   }
 
@@ -356,14 +342,13 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     let maxTop = 0;
 
     if (this.buildingGroups.size > 0) {
-      for (const group of this.buildingGroups.values()) {
-        minX = Math.min(minX, group.position.x);
-        maxX = Math.max(maxX, group.position.x);
-        minZ = Math.min(minZ, group.position.z);
-        maxZ = Math.max(maxZ, group.position.z);
-        const floors = (group.userData as { floors?: number })?.floors ?? 0;
+      for (const building of this.buildingGroups.values()) {
+        minX = Math.min(minX, building.group.position.x);
+        maxX = Math.max(maxX, building.group.position.x);
+        minZ = Math.min(minZ, building.group.position.z);
+        maxZ = Math.max(maxZ, building.group.position.z);
         // +1 covers the pyramid roof on houses (see createHouse in renderer3.js).
-        const top = floors + 1;
+        const top = building.floors + 1;
         if (top > maxTop) maxTop = top;
       }
     } else {
@@ -457,7 +442,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     );
     this.raycaster.setFromCamera(ndc, this.camera);
     const hits = this.raycaster.intersectObjects(
-      Array.from(this.buildingGroups.values()), true
+      Array.from(this.buildingGroups.values()).map((b) => b.group), true
     );
 
     if (hits.length === 0) { this.closeUml(); return; }
