@@ -335,6 +335,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
 
     let minX = Infinity, maxX = -Infinity;
     let minZ = Infinity, maxZ = -Infinity;
+    let maxTop = 0;
 
     if (this.buildingGroups.size > 0) {
       for (const group of this.buildingGroups.values()) {
@@ -342,19 +343,48 @@ export class ThreeJsCityRenderer implements ICityRenderer {
         maxX = Math.max(maxX, group.position.x);
         minZ = Math.min(minZ, group.position.z);
         maxZ = Math.max(maxZ, group.position.z);
+        const floors = (group.userData as { floors?: number })?.floors ?? 0;
+        // +1 covers the pyramid roof on houses (see createHouse in renderer3.js).
+        const top = floors + 1;
+        if (top > maxTop) maxTop = top;
       }
     } else {
       minX = 0; maxX = INITIAL_GRID_SIZE - 1;
       minZ = 0; maxZ = INITIAL_GRID_SIZE - 1;
+      maxTop = 8;
     }
 
     const cx = (minX + maxX) / 2;
+    const cy = maxTop / 2;
     const cz = (minZ + maxZ) / 2;
-    const extent = Math.max(maxX - minX, maxZ - minZ, 8);
-    const dist = extent * 2.5;
 
-    this.camera.position.set(cx + dist, dist * ISO_Y_FACTOR, cz + dist);
-    this.controls.target.set(cx, 0, cz);
+    // Project bounding volume onto the screen at the iso angle (30° elevation,
+    // 45° azimuth) to match the 2D fitToView: in 2D, gridH = diag*TILE_L/4 +
+    // buildingH (ground diagonal contributes sin(30°)/√2 ≈ 0.354 per unit, and
+    // building height contributes cos(30°) ≈ 0.866 per unit). Without the
+    // height term, tall skyscrapers clip above the frustum.
+    const spanX = Math.max(maxX - minX, 0);
+    const spanZ = Math.max(maxZ - minZ, 0);
+    const diag = Math.max(spanX + spanZ, 8);
+    const projV = 0.354 * diag + 0.866 * maxTop;
+    const projH = 0.707 * diag;
+
+    const fovRad = (this.camera.fov * Math.PI) / 180;
+    const aspect = this.camera.aspect || 1;
+    const tanHalfFov = Math.tan(fovRad / 2);
+    const padding = 1.1;
+
+    const camToTarget = Math.max(
+      (projV / 2) / tanHalfFov,
+      (projH / 2) / (tanHalfFov * aspect),
+    ) * padding;
+
+    // |offset from target| = dist * √(2 + ISO_Y_FACTOR²); invert to get dist.
+    const isoLen = Math.sqrt(2 + ISO_Y_FACTOR * ISO_Y_FACTOR);
+    const dist = camToTarget / isoLen;
+
+    this.camera.position.set(cx + dist, dist * ISO_Y_FACTOR + cy, cz + dist);
+    this.controls.target.set(cx, cy, cz);
     this.controls.update();
   }
 

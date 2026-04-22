@@ -233,8 +233,12 @@ function createUmlLabel(dto) {
   root.style.left = "0";
   root.style.transform = "translateX(-50%)";
   root.style.minWidth = "220px";
-  root.style.maxWidth = "320px";
-  root.style.maxHeight = "60vh";
+  root.style.minHeight = "120px";
+  root.style.width = "280px";
+  root.style.height = "320px";
+  root.style.maxWidth = "90vw";
+  root.style.maxHeight = "85vh";
+  root.style.resize = "both";
   root.style.background = "#1a1a2e";
   root.style.border = "2px solid #598BAF";
   root.style.borderRadius = "8px";
@@ -247,6 +251,8 @@ function createUmlLabel(dto) {
   root.style.whiteSpace = "pre-wrap";
   root.style.wordBreak = "break-all";
   root.addEventListener("wheel", (e) => e.stopPropagation());
+  // Resize grip needs mousedown/mousemove not to reach OrbitControls.
+  root.addEventListener("mousedown", (e) => e.stopPropagation());
 
   const header = document.createElement("div");
   header.textContent = uml.name || "Unnamed";
