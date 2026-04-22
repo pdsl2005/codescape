@@ -1,3 +1,4 @@
+// We may revisit this in future updates. Past notes are given below.
 // Not currently wired into the active rendering pipeline. Keep for reference;
 // elements here may be selectively reintroduced in future versions.
 /**

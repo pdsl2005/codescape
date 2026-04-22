@@ -84,44 +84,34 @@ suite('Extension Test Suite', () => {
   });
 
   test('webview receives a non-empty city state for real workspace fixtures', async () => {
-    const originalCreateWebviewPanel = vscode.window.createWebviewPanel;
     const fakeSink = createFakePanelSink();
+    const manager = new WebviewManager(
+      vscode.Uri.file(process.cwd()),
+      undefined,
+      () => fakeSink.panel as unknown as vscode.WebviewPanel,
+    );
+    manager.createWebview('side');
 
-    Object.defineProperty(vscode.window, 'createWebviewPanel', {
-      configurable: true,
-      value: () => fakeSink.panel,
-    });
+    const classes = loadEntitiesFromFixtures();
+    const payload = {
+      classes,
+      layout: computeCityLayout(classes),
+      status: classes.length > 0 ? ('ready' as const) : ('empty' as const),
+    };
 
-    try {
-      const manager = new WebviewManager(vscode.Uri.file(process.cwd()));
-      manager.createWebview('side');
+    manager.broadcastFullState(payload);
+    await fakeSink.sendToExtension({ type: 'READY' });
 
-      const classes = loadEntitiesFromFixtures();
-      const payload = {
-        classes,
-        layout: computeCityLayout(classes),
-        status: classes.length > 0 ? ('ready' as const) : ('empty' as const),
-      };
+    assert.ok(fakeSink.postedMessages.length > 0, 'webview should receive a message after READY');
 
-      manager.broadcastFullState(payload);
-      await fakeSink.sendToExtension({ type: 'READY' });
-
-      assert.ok(fakeSink.postedMessages.length > 0, 'webview should receive a message after READY');
-
-      const fullState = fakeSink.postedMessages.find((message) => message.type === 'FULL_STATE');
-      assert.ok(fullState, 'expected a FULL_STATE message');
-      assert.ok(fullState!.payload.classes.length > 0, 'FULL_STATE should contain parsed entities');
-      assert.ok(
-        Object.keys(fullState!.payload.layout).length > 0,
-        'FULL_STATE should contain building layout positions'
-      );
-      assert.strictEqual(fullState!.payload.status, 'ready');
-    } finally {
-      Object.defineProperty(vscode.window, 'createWebviewPanel', {
-        configurable: true,
-        value: originalCreateWebviewPanel,
-      });
-    }
+    const fullState = fakeSink.postedMessages.find((message) => message.type === 'FULL_STATE');
+    assert.ok(fullState, 'expected a FULL_STATE message');
+    assert.ok(fullState!.payload.classes.length > 0, 'FULL_STATE should contain parsed entities');
+    assert.ok(
+      Object.keys(fullState!.payload.layout).length > 0,
+      'FULL_STATE should contain building layout positions'
+    );
+    assert.strictEqual(fullState!.payload.status, 'ready');
   });
 
   test('registerExplorerView replays lastFullState immediately on registration', async () => {

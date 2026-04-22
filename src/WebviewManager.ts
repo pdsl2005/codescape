@@ -4,6 +4,10 @@ import type { FullStatePayload, PartialStatePayload } from './types/messages';
 type ViewLocation = 'side' | 'bottom' | 'explorer';
 type WebviewContainer = vscode.WebviewPanel | vscode.WebviewView;
 
+function isWebviewView(container: WebviewContainer): container is vscode.WebviewView {
+    return 'onDidChangeVisibility' in container;
+}
+
 interface ManagedWebview {
     container: WebviewContainer;
     location: ViewLocation;
@@ -11,6 +15,7 @@ interface ManagedWebview {
 }
 
 export type WebviewExtensionMessageHandler = (message: unknown) => void | Promise<void>;
+type CreateWebviewPanelFn = typeof vscode.window.createWebviewPanel;
 
 export class WebviewManager {
     private webviews: Map<string, ManagedWebview> = new Map();
@@ -21,6 +26,7 @@ export class WebviewManager {
     constructor(
         private extensionUri: vscode.Uri,
         private extensionMessageHandler?: WebviewExtensionMessageHandler,
+        private createPanelFn: CreateWebviewPanelFn = vscode.window.createWebviewPanel.bind(vscode.window),
     ) { }
 
     getLastFullState(): FullStatePayload | null {
@@ -31,7 +37,7 @@ export class WebviewManager {
         const viewColumn = location === 'side' ? vscode.ViewColumn.Two : vscode.ViewColumn.Nine;
         const title = location === 'side' ? 'Codescape Side' : 'Codescape Bottom';
 
-        const panel = vscode.window.createWebviewPanel(
+        const panel = this.createPanelFn(
             `codescapeWebview_${location}_${Date.now()}`,
             title,
             viewColumn,
@@ -74,7 +80,7 @@ export class WebviewManager {
         const viewId = this.generateViewId();
         this.webviews.set(viewId, managedWebview);
 
-        if (!('viewColumn' in container)) {
+        if (isWebviewView(container)) {
             managedWebview.isReady = true;
             if (this.lastFullState) {
                 container.webview.postMessage({
@@ -97,8 +103,7 @@ export class WebviewManager {
                 }
             } else if (msg.type === 'BUILDING_CLICK') {
                 this.onBuildingClick?.(msg.payload);
-            }
-            if (this.extensionMessageHandler) {
+            } else if (this.extensionMessageHandler) {
                 await this.extensionMessageHandler(message);
             }
         });

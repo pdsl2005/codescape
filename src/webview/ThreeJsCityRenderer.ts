@@ -56,6 +56,8 @@ export class ThreeJsCityRenderer implements ICityRenderer {
   // Persistent scene objects that must be disposed with the renderer
   private worldObjects: THREE.Object3D[] = [];
 
+  private boundOnResize: (() => void) | null = null;
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   init(container: HTMLElement, events?: RendererEvents): void {
@@ -99,6 +101,16 @@ export class ThreeJsCityRenderer implements ICityRenderer {
 
     this.renderer.domElement.addEventListener("click", this.onSceneClick);
 
+    this.boundOnResize = () => {
+      if (this.container) {
+        this.resize(
+          this.container.clientWidth || window.innerWidth,
+          this.container.clientHeight || window.innerHeight,
+        );
+      }
+    };
+    window.addEventListener('resize', this.boundOnResize);
+
     this.status = "ready";
     this.events.onReady?.();
     this.startLoop();
@@ -107,6 +119,10 @@ export class ThreeJsCityRenderer implements ICityRenderer {
   dispose(): void {
     this.stopLoop();
     this.renderer?.domElement.removeEventListener("click", this.onSceneClick);
+    if (this.boundOnResize) {
+      window.removeEventListener('resize', this.boundOnResize);
+      this.boundOnResize = null;
+    }
 
     this.buildingGroups.forEach((group) => {
       this.disposeGroup(group);
