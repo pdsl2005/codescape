@@ -61,6 +61,9 @@ export class ThreeJsCityRenderer implements ICityRenderer {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   init(container: HTMLElement, events?: RendererEvents): void {
+    if (this.status === "ready") {
+      this.dispose();
+    }
     this.container = container;
     this.events = events ?? {};
 

@@ -24,6 +24,7 @@ export class JavaFileWatcher {
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
             store.remove(uri);
+            if (!this.webviewManager.hasReadyViews()) { return; }
             this.postIncrementalChange(this.buildPartialStatePayload([], removedNames, store));
         });
 
@@ -45,6 +46,7 @@ export class JavaFileWatcher {
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
             store.remove(uri);
+            if (!this.webviewManager.hasReadyViews()) { return; }
             this.postIncrementalChange(this.buildPartialStatePayload([], removedNames, store));
         });
     }
@@ -75,6 +77,7 @@ export class JavaFileWatcher {
     private async handleIncrementalChange(uri: vscode.Uri, store: FileParseStore) {
         if (!await isExcluded(uri)) {
             const { changed, removed } = await parseAndStore(uri, store);
+            if (!this.webviewManager.hasReadyViews()) { return; }
             const payload = this.buildPartialStatePayload(changed, removed, store);
             this.postIncrementalChange(payload);
         }

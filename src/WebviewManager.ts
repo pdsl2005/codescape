@@ -161,6 +161,13 @@ export class WebviewManager {
         return this.webviews.size;
     }
 
+    hasReadyViews(): boolean {
+        for (const managed of this.webviews.values()) {
+            if (managed.isReady) { return true; }
+        }
+        return false;
+    }
+
     hasLocationActive(location: ViewLocation): boolean {
         for (const managed of this.webviews.values()) {
             if (managed.location === location) {

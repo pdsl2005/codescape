@@ -143,8 +143,12 @@ async function openClassSourceFromClassName(
     const doc = await vscode.workspace.openTextDocument(fileUri);
     const editor = await vscode.window.showTextDocument(doc);
     const text = doc.getText();
-    const needle = `class ${className}`;
-    const idx = text.indexOf(needle);
+    const keyword =
+      match.Type === 'interface' ? 'interface'
+      : match.Type === 'module'  ? null
+      : 'class';
+    const needle = keyword ? `${keyword} ${className}` : '';
+    const idx = needle ? text.indexOf(needle) : -1;
 
     const targetRange =
       idx >= 0
