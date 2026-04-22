@@ -120,16 +120,16 @@ export function createPyramidRoof(width, height, depth, color) {
 
 // building generators
 // house
-export function createHouse(dto) {
+export function createHouse(dto, texturePath) {
   const group = new THREE.Group();
 
   const bodyWidth = gridSize;
   const bodyDepth = gridSize;
   const floorHeight = gridSize;
 
-  const texture = getRandomTexture(houseTextures());
+  const texture = texturePath ?? getRandomTexture(houseTextures());
 
-  // stack block depending on the floor height 
+  // stack block depending on the floor height
   for (let i = 0; i < dto.floors; i++) {
     const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#FFE135", texture);
     block.position.set(0, floorHeight / 2 + i * floorHeight, 0);
@@ -143,20 +143,19 @@ export function createHouse(dto) {
   group.add(roof);
 
   group.position.set(dto.col, 0, dto.row);
-  group.userData = dto;
 
-  return attachUmlToGroup(group, dto);
+  return attachUmlToGroup(group, dto, { texturePath: texture });
 }
 
 // create apt 
-export function createApartment(dto) {
+export function createApartment(dto, texturePath) {
   const group = new THREE.Group();
 
   const bodyWidth = gridSize;
   const bodyDepth = gridSize;
   const floorHeight = gridSize;
 
-  const texture = getRandomTexture(apartmentTextures());
+  const texture = texturePath ?? getRandomTexture(apartmentTextures());
 
   for (let i = 0; i < dto.floors; i++) {
     const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#87AE73", texture);
@@ -165,20 +164,19 @@ export function createApartment(dto) {
   }
 
   group.position.set(dto.col, 0, dto.row);
-  group.userData = dto;
 
-  return attachUmlToGroup(group, dto);
+  return attachUmlToGroup(group, dto, { texturePath: texture });
 }
 
 // create skyscraper 
-export function createSkyscraper(dto) {
+export function createSkyscraper(dto, texturePath) {
   const group = new THREE.Group();
 
   const bodyWidth = gridSize;
   const bodyDepth = gridSize;
   const floorHeight = gridSize;
-  
-  const texture = getRandomTexture(skyscraperTextures());
+
+  const texture = texturePath ?? getRandomTexture(skyscraperTextures());
 
   for (let i = 0; i < dto.floors; i++) {
     const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#82CAFF", texture);
@@ -187,22 +185,21 @@ export function createSkyscraper(dto) {
   }
 
   group.position.set(dto.col, 0, dto.row);
-  group.userData = dto;
 
-  return attachUmlToGroup(group, dto);
+  return attachUmlToGroup(group, dto, { texturePath: texture });
 }
 
 // decide type of building depending on the floor height 
-export function createBuildingFromDTO(dto) {
+export function createBuildingFromDTO(dto, texturePath) {
   if (dto.floors <= 2) {
-    return createHouse(dto);
+    return createHouse(dto, texturePath);
   }
 
   if (dto.floors <= 6) {
-    return createApartment(dto);
+    return createApartment(dto, texturePath);
   }
 
-  return createSkyscraper(dto);
+  return createSkyscraper(dto, texturePath);
 }
 
 export function createBuildingsFromDTOs(dtoList) {
@@ -270,7 +267,7 @@ function createUmlLabel(dto) {
 }
 
 // displaying uml label to the building
-function attachUmlToGroup(group, dto) {
+function attachUmlToGroup(group, dto, extraData = {}) {
   const umlLabel = createUmlLabel(dto);
 
   // roof / building 위쪽에 뜨도록
@@ -281,7 +278,8 @@ function attachUmlToGroup(group, dto) {
   group.userData = {
     ...dto,
     isBuilding: true,
-    umlLabel: umlLabel
+    umlLabel: umlLabel,
+    ...extraData,
   };
 
   return group;
