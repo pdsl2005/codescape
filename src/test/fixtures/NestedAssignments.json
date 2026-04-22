@@ -1,0 +1,56 @@
+{
+  "sourceFile": "NestedAssignments.py",
+  "parsedAt": "2026-04-22T19:43:28.873Z",
+  "classes": [
+    {
+      "Classname": "Config",
+      "Methods": [],
+      "Loc": 20,
+      "Type": "class",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [
+        {
+          "name": "mode",
+          "type": "unknown",
+          "modifiers": []
+        },
+        {
+          "name": "retries",
+          "type": "unknown",
+          "modifiers": []
+        },
+        {
+          "name": "never",
+          "type": "unknown",
+          "modifiers": []
+        },
+        {
+          "name": "status",
+          "type": "unknown",
+          "modifiers": []
+        },
+        {
+          "name": "path",
+          "type": "unknown",
+          "modifiers": []
+        }
+      ],
+      "Constructors": [
+        {
+          "parameters": [
+            {
+              "name": "enabled",
+              "type": "bool"
+            },
+            {
+              "name": "retries",
+              "type": "int"
+            }
+          ],
+          "modifiers": []
+        }
+      ]
+    }
+  ]
+}
