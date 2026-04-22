@@ -30,12 +30,19 @@ export class ColorManager {
   private load(): void {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) { this.colorMap = JSON.parse(stored); }
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          this.colorMap = parsed;
+        }
+      }
     } catch { this.colorMap = {}; }
   }
 
   private save(): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.colorMap));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.colorMap));
+    } catch { /* quota exceeded or storage unavailable — colors persist in memory only */ }
   }
 
   assign(files: Array<{ name: string; type?: string }>): void {
