@@ -57,6 +57,8 @@ export class ThreeJsCityRenderer implements ICityRenderer {
   private worldObjects: THREE.Object3D[] = [];
 
   private boundOnResize: (() => void) | null = null;
+  private boundOnKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  private hasInitialFit = false;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -115,6 +117,15 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     };
     window.addEventListener('resize', this.boundOnResize);
 
+    this.controls.update();
+
+    this.boundOnKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'r' || e.key === 'R') {
+        this.resetView();
+      }
+    };
+    window.addEventListener('keydown', this.boundOnKeyDown);
+
     this.status = "ready";
     this.events.onReady?.();
     this.startLoop();
@@ -160,6 +171,11 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     this.camera = null;
     this.controls = null;
     this.container = null;
+    if (this.boundOnKeyDown) {
+      window.removeEventListener('keydown', this.boundOnKeyDown);
+      this.boundOnKeyDown = null;
+    }
+    this.hasInitialFit = false;
     this.status = "disposed";
   }
 
@@ -206,6 +222,10 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       }
     }
 
+    if (!this.hasInitialFit && this.buildingGroups.size > 0) {
+      this.fitCamera();
+      this.hasInitialFit = true;
+    }
     this.status = "ready";
   }
 
@@ -229,11 +249,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
   }
 
   resetView(): void {
-    if (!this.camera || !this.controls) return;
-    const cx = INITIAL_GRID_SIZE / 2;
-    this.camera.position.set(cx + INITIAL_GRID_SIZE, INITIAL_GRID_SIZE, cx + INITIAL_GRID_SIZE);
-    this.controls.target.set(cx, 0, cx);
-    this.controls.update();
+    this.fitCamera();
   }
 
   // ── Interaction ────────────────────────────────────────────────────────────
@@ -297,6 +313,34 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       current = current.parent;
     }
     return null;
+  }
+
+  private fitCamera(): void {
+    if (!this.camera || !this.controls) return;
+
+    let minX = Infinity, maxX = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+
+    if (this.buildingGroups.size > 0) {
+      for (const group of this.buildingGroups.values()) {
+        minX = Math.min(minX, group.position.x);
+        maxX = Math.max(maxX, group.position.x);
+        minZ = Math.min(minZ, group.position.z);
+        maxZ = Math.max(maxZ, group.position.z);
+      }
+    } else {
+      minX = 0; maxX = INITIAL_GRID_SIZE - 1;
+      minZ = 0; maxZ = INITIAL_GRID_SIZE - 1;
+    }
+
+    const cx = (minX + maxX) / 2;
+    const cz = (minZ + maxZ) / 2;
+    const extent = Math.max(maxX - minX, maxZ - minZ, 8);
+    const dist = extent * 1.2;
+
+    this.camera.position.set(cx + dist, dist, cz + dist);
+    this.controls.target.set(cx, 0, cz);
+    this.controls.update();
   }
 
   private startLoop(): void {
