@@ -65,7 +65,7 @@ export class WebviewManager {
         viewId: string,
         location: 'explorer' | 'bottom',
     ): vscode.Disposable {
-        return this.factory.registerViewProvider(viewId, location, (view) => {
+        return this.factory.registerViewProvider(viewId, (view) => {
             this.addWebview(view, location);
         });
     }

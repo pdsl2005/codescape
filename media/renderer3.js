@@ -37,25 +37,27 @@ export function createLights(scene) {
   return [ambientLight, directionalLight];
 }
 
-export function createGround(scene, size) {
-  const groundGeometry = new THREE.PlaneGeometry(size, size);
+export function createGround(scene, cols, rows) {
+  const groundGeometry = new THREE.PlaneGeometry(cols, rows);
   const groundMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e8e8 });
 
   const ground = new THREE.Mesh(groundGeometry, groundMaterial);
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(size / 2 - 0.5, 0, size / 2 - 0.5);
+  ground.position.set(cols / 2 - 0.5, 0, rows / 2 - 0.5);
 
   scene.add(ground);
   return ground;
 }
 
-var gridSize = 1;
-
-export function createGrid(scene, size, divisions) {
-  const cellSize = gridSize;
-  size = cellSize * divisions;
-  const grid = new THREE.GridHelper(size, divisions, 0x777777, 0xaaaaaa);
-  grid.position.set(size / 2 - cellSize / 2, 0.01, size / 2 - cellSize / 2);
+export function createGrid(scene, cols, rows) {
+  const pts = [];
+  for (let r = 0; r <= rows; r++) { pts.push(0, 0, r, cols, 0, r); }
+  for (let c = 0; c <= cols; c++) { pts.push(c, 0, 0, c, 0, rows); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+  const grid = new THREE.LineSegments(geo, mat);
+  grid.position.set(-0.5, 0.01, -0.5);
 
   scene.add(grid);
   return grid;

@@ -4,13 +4,12 @@
 // and delegates all building mesh creation to renderer3.js — no duplication.
 
 import * as THREE from 'three';
-import { OrbitControls } from 'https://unpkg.com/three@0.141.0/examples/jsm/controls/OrbitControls.js';
-import { CSS2DRenderer, CSS2DObject } from 'https://unpkg.com/three@0.141.0/examples/jsm/renderers/CSS2DRenderer.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 // Building creators from the JS prototype — imported as-is, not rewritten in TS.
 // esbuild.webview.mjs has a cdnRedirectPlugin that resolves the CDN imports
 // inside renderer3.js to the local node_modules/three copy at bundle time.
-// @ts-ignore
 import {
   createLights,
   createGround,
@@ -30,6 +29,8 @@ import {
 } from "./types";
 
 const INITIAL_GRID_SIZE = 20;
+// Y factor for 30° camera elevation at 45° azimuth — matches the 2D view's 2:1 isometric ratio
+const ISO_Y_FACTOR = Math.sqrt(2 / 3);
 
 export class ThreeJsCityRenderer implements ICityRenderer {
   status: RendererStatus = "uninitialized";
@@ -55,6 +56,10 @@ export class ThreeJsCityRenderer implements ICityRenderer {
 
   // Persistent scene objects that must be disposed with the renderer
   private worldObjects: THREE.Object3D[] = [];
+  private currentGridCols = INITIAL_GRID_SIZE;
+  private currentGridRows = INITIAL_GRID_SIZE;
+  private groundObj: THREE.Object3D | null = null;
+  private gridObj: THREE.Object3D | null = null;
 
   private boundOnResize: (() => void) | null = null;
   private boundOnKeyDown: ((e: KeyboardEvent) => void) | null = null;
@@ -92,7 +97,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     // Camera — positioned far enough to see the full grid on open
     this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
     const cx = INITIAL_GRID_SIZE / 2;
-    this.camera.position.set(cx + INITIAL_GRID_SIZE, INITIAL_GRID_SIZE, cx + INITIAL_GRID_SIZE);
+    this.camera.position.set(cx + INITIAL_GRID_SIZE, INITIAL_GRID_SIZE * ISO_Y_FACTOR, cx + INITIAL_GRID_SIZE);
 
     // OrbitControls with damping (matches main3.js)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -101,9 +106,9 @@ export class ThreeJsCityRenderer implements ICityRenderer {
 
     // World setup — store returned objects so dispose() can clean them up
     const lights = createLights(this.scene);
-    const ground = createGround(this.scene, INITIAL_GRID_SIZE);
-    const grid = createGrid(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
-    this.worldObjects = [...lights, ground, grid];
+    this.groundObj = createGround(this.scene, INITIAL_GRID_SIZE);
+    this.gridObj = createGrid(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
+    this.worldObjects = [...lights, this.groundObj, this.gridObj];
 
     this.renderer.domElement.addEventListener("click", this.onSceneClick);
 
@@ -154,6 +159,9 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       }
     });
     this.worldObjects = [];
+    this.currentGridSize = INITIAL_GRID_SIZE;
+    this.groundObj = null;
+    this.gridObj = null;
 
     disposeTextureCache();
 
@@ -220,6 +228,11 @@ export class ThreeJsCityRenderer implements ICityRenderer {
         this.scene.add(group);
         this.buildingGroups.set(key, group);
       }
+    }
+
+    const neededSize = this.calculateGridSize(dtos);
+    if (neededSize !== this.currentGridSize) {
+      this.updateGroundAndGrid(neededSize);
     }
 
     if (!this.hasInitialFit && this.buildingGroups.size > 0) {
@@ -338,9 +351,44 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     const extent = Math.max(maxX - minX, maxZ - minZ, 8);
     const dist = extent * 1.2;
 
-    this.camera.position.set(cx + dist, dist, cz + dist);
+    this.camera.position.set(cx + dist, dist * ISO_Y_FACTOR, cz + dist);
     this.controls.target.set(cx, 0, cz);
     this.controls.update();
+  }
+
+  private calculateGridSize(dtos: BuildingDTO[]): number {
+    let maxCol = 0;
+    let maxRow = 0;
+    for (const dto of dtos) {
+      if (dto.col > maxCol) maxCol = dto.col;
+      if (dto.row > maxRow) maxRow = dto.row;
+    }
+    const needed = Math.max(maxCol, maxRow) + 1;
+    return needed <= 10 ? 10 : needed;
+  }
+
+  private updateGroundAndGrid(size: number): void {
+    if (!this.scene) return;
+
+    for (const obj of [this.groundObj, this.gridObj]) {
+      if (!obj) continue;
+      this.scene.remove(obj);
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.LineSegments) {
+        obj.geometry?.dispose();
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        (mats as THREE.Material[]).forEach((m) => m?.dispose());
+      }
+    }
+    this.worldObjects = this.worldObjects.filter(
+      (o) => o !== this.groundObj && o !== this.gridObj
+    );
+
+    const newGround = createGround(this.scene, size);
+    const newGrid = createGrid(this.scene, size, size);
+    this.groundObj = newGround;
+    this.gridObj = newGrid;
+    this.worldObjects.push(newGround, newGrid);
+    this.currentGridSize = size;
   }
 
   private startLoop(): void {

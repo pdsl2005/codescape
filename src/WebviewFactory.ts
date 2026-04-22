@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
 type CreateWebviewPanelFn = typeof vscode.window.createWebviewPanel;
@@ -56,7 +57,6 @@ export class WebviewFactory {
      */
     registerViewProvider(
         viewId: string,
-        location: 'explorer' | 'bottom',
         onResolved: (view: vscode.WebviewView) => void,
     ): vscode.Disposable {
         return vscode.window.registerWebviewViewProvider(
@@ -88,6 +88,10 @@ export class WebviewFactory {
         view.webview.html = this.getWebviewContent(view.webview);
     }
 
+    private getNonce(): string {
+        return crypto.randomBytes(16).toString('base64');
+    }
+
     private getWebviewContent(webview: vscode.Webview): string {
         const bundleUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'webviewBundle.js')
@@ -95,10 +99,16 @@ export class WebviewFactory {
         const imagesUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.extensionUri, 'media', 'images')
         );
+        const nonce = this.getNonce();
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <style>
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none';
+                 style-src 'nonce-${nonce}';
+                 script-src 'nonce-${nonce}';
+                 img-src ${webview.cspSource} data:;">
+  <style nonce="${nonce}">
     body { margin: 0; overflow: hidden; }
     #city-container { width: 100vw; height: 100vh; }
     #toggle-view-btn {
@@ -114,8 +124,8 @@ export class WebviewFactory {
 <body>
   <div id="city-container"></div>
   <button id="toggle-view-btn">Switch to 3D</button>
-  <script>window.CODESCAPE_IMAGES_URI = "${imagesUri}";</script>
-  <script src="${bundleUri}"></script>
+  <script nonce="${nonce}">window.CODESCAPE_IMAGES_URI = "${imagesUri}";</script>
+  <script nonce="${nonce}" src="${bundleUri}"></script>
 </body>
 </html>`;
     }

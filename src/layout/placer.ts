@@ -38,20 +38,29 @@ export function computeLayout(nodes: BuildingNode[]): LayoutMap {
     }
   }
 
-  // Second pass: place inner classes relative to their parent
+  // Second pass: place inner classes after all existing nodes in their parent's row
+  // so they never collide with neighbors placed during the first pass.
+  const nextColPerRow = new Map<string, number>();
+  for (const pos of Object.values(layout)) {
+    const key = String(pos.row);
+    const next = pos.col + 1;
+    if (next > (nextColPerRow.get(key) ?? 0)) {
+      nextColPerRow.set(key, next);
+    }
+  }
+
   for (const innerClass of innerClasses) {
     if (!placed.has(innerClass.id)) {
       const parentLayout = layout[innerClass.parentClass!];
       if (parentLayout) {
-        // Position inner classes at increased depth and offset from parent
-        const innerCol = parentLayout.col + 1;
-        const innerRow = parentLayout.row;
-        const depth = (parentLayout.depth || 0) + 1;
+        const rowKey = String(parentLayout.row);
+        const innerCol = nextColPerRow.get(rowKey) ?? 0;
+        nextColPerRow.set(rowKey, innerCol + 1);
 
         layout[innerClass.id] = {
           col: innerCol,
-          row: innerRow,
-          depth
+          row: parentLayout.row,
+          depth: (parentLayout.depth ?? 0) + 1,
         };
         placed.add(innerClass.id);
       } else {
