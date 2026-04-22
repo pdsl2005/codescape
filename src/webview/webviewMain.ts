@@ -45,16 +45,21 @@ const events = {
 let currentView: "canvas2d" | "threejs" = "canvas2d";
 registry.setActive("canvas2d", container, events);
 
-const toggleBtn = document.getElementById("toggle-view-btn") as HTMLButtonElement | null;
+const toggleBtn = document.getElementById(
+  "toggle-view-btn",
+) as HTMLButtonElement | null;
 toggleBtn?.addEventListener("click", () => {
   currentView = currentView === "canvas2d" ? "threejs" : "canvas2d";
   registry.setActive(currentView, container, events);
   if (toggleBtn) {
-    toggleBtn.textContent = currentView === "canvas2d" ? "Switch to 3D" : "Switch to 2D";
+    toggleBtn.textContent =
+      currentView === "canvas2d" ? "Switch to 3D" : "Switch to 2D";
   }
   const newRenderer = registry.getActive();
   if (newRenderer && currentClasses.length > 0) {
-    newRenderer.renderCity(parsedClassesToCityState(currentClasses, currentLayout));
+    newRenderer.renderCity(
+      parsedClassesToCityState(currentClasses, currentLayout),
+    );
   }
   applyTheme(currentTheme);
   vscode.postMessage({ type: "VIEW_CHANGED", payload: currentView });
@@ -97,7 +102,7 @@ let currentLayout: Record<string, LayoutPosition> | undefined;
  */
 function parsedClassesToCityState(
   classes: any[],
-  layout?: Record<string, LayoutPosition>
+  layout?: Record<string, LayoutPosition>,
 ): CityState {
   const files: FileData[] = classes.map((cls) => ({
     name: cls.Classname ?? "",
@@ -108,8 +113,10 @@ function parsedClassesToCityState(
     uml: {
       name: cls.Classname ?? "",
       fields: (cls.Fields ?? []).map((f: any) => `${f.name}: ${f.type}`),
-      methods: (cls.Methods ?? []).map((m: any) =>
-        `${m.name}(${(m.parameters ?? []).join(", ")}): ${m.returnType ?? "void"}`),
+      methods: (cls.Methods ?? []).map(
+        (m: any) =>
+          `${m.name}(${(m.parameters ?? []).join(", ")}): ${m.returnType ?? "void"}`,
+      ),
     },
   }));
   colorManager.assign(files);
@@ -121,14 +128,18 @@ function parsedClassesToCityState(
 window.addEventListener("message", (event) => {
   const msg = event.data;
   const renderer = registry.getActive();
-  if (!renderer) { return; }
+  if (!renderer) {
+    return;
+  }
 
   switch (msg.type) {
     case "FULL_STATE": {
       // Replace full state and re-render
       currentClasses = msg.payload.classes ?? [];
       currentLayout = msg.payload.layout;
-      renderer.renderCity(parsedClassesToCityState(currentClasses, currentLayout));
+      renderer.renderCity(
+        parsedClassesToCityState(currentClasses, currentLayout),
+      );
       break;
     }
 
@@ -138,20 +149,22 @@ window.addEventListener("message", (event) => {
 
       // Remove deleted classes
       currentClasses = currentClasses.filter(
-        (cls) => !removed.includes(cls.Classname)
+        (cls) => !removed.includes(cls.Classname),
       );
 
       // Apply changed + related updates
       const classMap = new Map(
-        currentClasses.map((cls) => [cls.Classname, cls])
+        currentClasses.map((cls) => [cls.Classname, cls]),
       );
       [...changed, ...related].forEach((cls) =>
-        classMap.set(cls.Classname, cls)
+        classMap.set(cls.Classname, cls),
       );
       currentClasses = Array.from(classMap.values());
 
       currentLayout = msg.payload.layout;
-      renderer.renderCity(parsedClassesToCityState(currentClasses, currentLayout));
+      renderer.renderCity(
+        parsedClassesToCityState(currentClasses, currentLayout),
+      );
       break;
     }
 
