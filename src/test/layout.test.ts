@@ -3,14 +3,15 @@ import { computeLayout } from '../layout/placer';
 import { BuildingNode } from '../layout/types';
 
 suite('Layout Placer Tests', () => {
-  test('places unrelated nodes in separate rows', () => {
+  test('places unrelated nodes at distinct grid positions', () => {
     const nodes: BuildingNode[] = [
       { id: 'A', name: 'A', neighbors: [] },
       { id: 'B', name: 'B', neighbors: [] },
     ];
     const layout = computeLayout(nodes);
     assert.deepStrictEqual(layout['A'], { col: 0, row: 0, depth: 0 });
-    assert.deepStrictEqual(layout['B'], { col: 0, row: 1, depth: 0 });
+    // With 2 nodes maxCols=2, B fills the same row at col 1
+    assert.deepStrictEqual(layout['B'], { col: 1, row: 0, depth: 0 });
   });
 
   test('places related nodes next to each other', () => {
@@ -66,5 +67,38 @@ suite('Layout Placer Tests', () => {
     assert.strictEqual(layout['Outer'].depth, 0, 'Outer class should have depth 0');
     assert.strictEqual(layout['Middle'].depth, 1, 'Middle class should have depth 1');
     assert.strictEqual(layout['Inner'].depth, 2, 'Inner class should have depth 2');
+  });
+
+  test('places multiple inner classes of the same parent at distinct positions', () => {
+    const nodes: BuildingNode[] = [
+      { id: 'Outer', name: 'Outer', neighbors: [] },
+      { id: 'Inner1', name: 'Inner1', neighbors: [], parentClass: 'Outer' },
+      { id: 'Inner2', name: 'Inner2', neighbors: [], parentClass: 'Outer' },
+      { id: 'Inner3', name: 'Inner3', neighbors: [], parentClass: 'Outer' },
+    ];
+    const layout = computeLayout(nodes);
+    const positions = [layout['Inner1'], layout['Inner2'], layout['Inner3']];
+    const keys = positions.map(p => `${p.col},${p.row}`);
+    const unique = new Set(keys);
+    assert.strictEqual(unique.size, 3, 'All inner classes must have distinct grid positions');
+  });
+
+  test('no two nodes share the same grid position', () => {
+    const nodes: BuildingNode[] = [
+      { id: 'A', name: 'A', neighbors: ['B', 'C'] },
+      { id: 'B', name: 'B', neighbors: [] },
+      { id: 'C', name: 'C', neighbors: [] },
+      { id: 'D', name: 'D', neighbors: [] },
+      { id: 'InnerA1', name: 'InnerA1', neighbors: [], parentClass: 'A' },
+      { id: 'InnerA2', name: 'InnerA2', neighbors: [], parentClass: 'A' },
+      { id: 'InnerB1', name: 'InnerB1', neighbors: [], parentClass: 'B' },
+    ];
+    const layout = computeLayout(nodes);
+    const seen = new Set<string>();
+    for (const [id, pos] of Object.entries(layout)) {
+      const key = `${pos.col},${pos.row}`;
+      assert.ok(!seen.has(key), `Duplicate position ${key} for node ${id}`);
+      seen.add(key);
+    }
   });
 });

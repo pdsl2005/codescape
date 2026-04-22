@@ -3,6 +3,11 @@ import { CSS2DObject } from 'https://unpkg.com/three@0.141.0/examples/jsm/render
 
 let _imageBase = './images';
 
+/**
+ * Do not remove this!!! It holds the rendering together. 
+ */
+const gridSize = 1.0;
+
 export function setImageBasePath(base) {
   _imageBase = base.replace(/\/$/, '');
 }
@@ -37,25 +42,27 @@ export function createLights(scene) {
   return [ambientLight, directionalLight];
 }
 
-export function createGround(scene, size) {
-  const groundGeometry = new THREE.PlaneGeometry(size, size);
+export function createGround(scene, cols, rows) {
+  const groundGeometry = new THREE.PlaneGeometry(cols, rows);
   const groundMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e8e8 });
 
   const ground = new THREE.Mesh(groundGeometry, groundMaterial);
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(size / 2 - 0.5, 0, size / 2 - 0.5);
+  ground.position.set(cols / 2 - 0.5, 0, rows / 2 - 0.5);
 
   scene.add(ground);
   return ground;
 }
 
-var gridSize = 1;
-
-export function createGrid(scene, size, divisions) {
-  const cellSize = gridSize;
-  size = cellSize * divisions;
-  const grid = new THREE.GridHelper(size, divisions, 0x777777, 0xaaaaaa);
-  grid.position.set(size / 2 - cellSize / 2, 0.01, size / 2 - cellSize / 2);
+export function createGrid(scene, cols, rows) {
+  const pts = [];
+  for (let r = 0; r <= rows; r++) { pts.push(0, 0, r, cols, 0, r); }
+  for (let c = 0; c <= cols; c++) { pts.push(c, 0, 0, c, 0, rows); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+  const grid = new THREE.LineSegments(geo, mat);
+  grid.position.set(-0.5, 0.01, -0.5);
 
   scene.add(grid);
   return grid;
@@ -167,9 +174,9 @@ export function createApartment(dto) {
 export function createSkyscraper(dto) {
   const group = new THREE.Group();
 
-  const bodyWidth = 1.0;
-  const bodyDepth = 1.0;
-  const floorHeight = 1.0;
+  const bodyWidth = gridSize;
+  const bodyDepth = gridSize;
+  const floorHeight = gridSize;
   
   const texture = getRandomTexture(skyscraperTextures());
 
@@ -215,56 +222,49 @@ function createUmlLabel(dto) {
     methods: []
   };
 
+  // Zero-sized anchor — CSS2DRenderer's translate(-50%,-50%) is a no-op on
+  // 0×0, so the anchor's top-left sits exactly on the projected 3D point.
+  const anchor = document.createElement("div");
+  anchor.className = "uml-anchor";
+
+  // The actual UML box, anchored with its top-center at the 3D point so the
+  // label grows downward from the building roof instead of extending above it.
   const root = document.createElement("div");
-  root.style.minWidth = "220px";
-  root.style.maxWidth = "280px";
-  root.style.background = "#1a1a2e";
-  root.style.border = "2px solid #598BAF";
-  root.style.borderRadius = "8px";
-  root.style.overflow = "hidden";
-  root.style.color = "#d9d9d9";
-  root.style.fontFamily = "monospace";
-  root.style.fontSize = "13px";
-  root.style.boxShadow = "0 6px 18px rgba(0,0,0,0.35)";
-  //root.style.display = "none"; 
-  root.style.pointerEvents = "none";
-  root.style.whiteSpace = "pre-wrap";
+  root.className = "uml-panel";
+  root.addEventListener("wheel", (e) => e.stopPropagation());
+  // Resize grip needs mousedown/mousemove not to reach OrbitControls.
+  root.addEventListener("mousedown", (e) => e.stopPropagation());
 
   const header = document.createElement("div");
   header.textContent = uml.name || "Unnamed";
-  header.style.background = "#598BAF";
-  header.style.color = "#ffffff";
-  header.style.fontWeight = "bold";
-  header.style.textAlign = "center";
-  header.style.padding = "8px 10px";
-  header.style.fontSize = "15px";
+  header.className = "uml-panel-header";
   root.appendChild(header);
 
   const fieldsSection = document.createElement("div");
-  fieldsSection.style.padding = "8px 10px";
-  fieldsSection.style.borderTop = "1px solid #598BAF";
+  fieldsSection.className = "uml-panel-section";
 
   (uml.fields || []).forEach((field) => {
     const line = document.createElement("div");
     line.textContent = `- ${field}`;
-    line.style.margin = "3px 0";
+    line.className = "uml-panel-line";
     fieldsSection.appendChild(line);
   });
   root.appendChild(fieldsSection);
 
   const methodsSection = document.createElement("div");
-  methodsSection.style.padding = "8px 10px";
-  methodsSection.style.borderTop = "1px solid #598BAF";
+  methodsSection.className = "uml-panel-section";
 
   (uml.methods || []).forEach((method) => {
     const line = document.createElement("div");
     line.textContent = `+ ${method}`;
-    line.style.margin = "3px 0";
+    line.className = "uml-panel-line";
     methodsSection.appendChild(line);
   });
   root.appendChild(methodsSection);
 
-  const label = new CSS2DObject(root);
+  anchor.appendChild(root);
+
+  const label = new CSS2DObject(anchor);
   label.visible = false;
   return label;
 }

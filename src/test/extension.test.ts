@@ -90,7 +90,7 @@ suite('Extension Test Suite', () => {
       undefined,
       () => fakeSink.panel as unknown as vscode.WebviewPanel,
     );
-    manager.createWebview('side');
+    manager.createWebview();
 
     const classes = loadEntitiesFromFixtures();
     const payload = {
@@ -146,6 +146,49 @@ suite('Extension Test Suite', () => {
     assert.strictEqual(postedMessages.length, 0, 'no messages before registration');
 
     manager.registerExplorerView(fakeView as unknown as vscode.WebviewView);
+
+    assert.strictEqual(postedMessages.length, 0, 'no FULL_STATE before READY');
+
+    assert.ok(messageHandler, 'onDidReceiveMessage handler must be registered');
+    await messageHandler!({ type: 'READY' });
+
+    const fullStateMsg = postedMessages.find((m: any) => m.type === 'FULL_STATE');
+    assert.ok(fullStateMsg, 'expected FULL_STATE after READY');
+    assert.strictEqual((fullStateMsg as any).payload.status, 'ready');
+  });
+
+  test('registerBottomView replays lastFullState after READY handshake', async () => {
+    const postedMessages: unknown[] = [];
+    let messageHandler: ((msg: unknown) => void | Promise<void>) | undefined;
+
+    const fakeView = {
+      viewType: 'codescape.BottomView',
+      webview: {
+        html: '',
+        options: {},
+        onDidReceiveMessage: (handler: (msg: unknown) => void) => {
+          messageHandler = handler;
+          return new vscode.Disposable(() => {});
+        },
+        postMessage: async (msg: unknown) => {
+          postedMessages.push(msg);
+          return true;
+        },
+        asWebviewUri: (uri: vscode.Uri) => uri,
+      },
+      onDidDispose: (_cb: () => void) => new vscode.Disposable(() => {}),
+      onDidChangeVisibility: (_cb: () => void) => new vscode.Disposable(() => {}),
+    };
+
+    const manager = new WebviewManager(vscode.Uri.file(process.cwd()));
+
+    const classes = loadEntitiesFromFixtures();
+    const layout = computeCityLayout(classes);
+    manager.broadcastFullState({ classes, layout, status: 'ready' });
+
+    assert.strictEqual(postedMessages.length, 0, 'no messages before registration');
+
+    manager.registerBottomView(fakeView as unknown as vscode.WebviewView);
 
     assert.strictEqual(postedMessages.length, 0, 'no FULL_STATE before READY');
 

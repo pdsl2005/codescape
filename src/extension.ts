@@ -24,21 +24,21 @@ export async function activate(context: vscode.ExtensionContext) {
   const javaWatcher = new JavaFileWatcher(store, webviewManager);
   await initializeParser();
 
-  const provider = new CodescapeViewProvider(webviewManager);
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("codescape.Cityview", provider)
+    webviewManager.registerViewProvider("codescape.Cityview", 'explorer'),
+    webviewManager.registerViewProvider("codescape.BottomView", 'bottom'),
   );
 
   const createSidePanel = vscode.commands.registerCommand("codescape.createSidePanel", () => {
-    webviewManager.createWebview("side");
+    webviewManager.createSidePanel();
   });
 
   const createBottomPanel = vscode.commands.registerCommand("codescape.createBottomPanel", () => {
-    webviewManager.createWebview("bottom");
+    return vscode.commands.executeCommand("codescape.BottomView.focus");
   });
 
   const create = vscode.commands.registerCommand("codescape.createPanel", () => {
-    webviewManager.createWebview("side");
+    webviewManager.createSidePanel();
   });
   const existingFiles = [
     ...(await getJavaFiles()),
@@ -268,15 +268,6 @@ export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
   const relativePath = vscode.workspace.asRelativePath(uri);
   const excludePatterns = await getExcludePatterns();
   return excludePatterns.some((pattern) => minimatch(relativePath, pattern));
-}
-
-// sidebar view
-class CodescapeViewProvider implements vscode.WebviewViewProvider {
-  constructor(private readonly webviewManager: WebviewManager) { }
-  resolveWebviewView(webviewView: vscode.WebviewView): void {
-    console.log('resolveWebviewView called, view id:', webviewView.viewType);
-    this.webviewManager.registerExplorerView(webviewView);
-  }
 }
 
 export function deactivate() { }

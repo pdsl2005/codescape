@@ -4,13 +4,12 @@
 // and delegates all building mesh creation to renderer3.js — no duplication.
 
 import * as THREE from 'three';
-import { OrbitControls } from 'https://unpkg.com/three@0.141.0/examples/jsm/controls/OrbitControls.js';
-import { CSS2DRenderer, CSS2DObject } from 'https://unpkg.com/three@0.141.0/examples/jsm/renderers/CSS2DRenderer.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 // Building creators from the JS prototype — imported as-is, not rewritten in TS.
 // esbuild.webview.mjs has a cdnRedirectPlugin that resolves the CDN imports
 // inside renderer3.js to the local node_modules/three copy at bundle time.
-// @ts-ignore
 import {
   createLights,
   createGround,
@@ -28,8 +27,13 @@ import {
   BuildingDTO,
   filesToBuildingDTOs,
 } from "./types";
+import { computeCameraFit } from "../cameraFit";
+
+export { computeCameraFit } from "../cameraFit";
 
 const INITIAL_GRID_SIZE = 20;
+// Y factor for 30° camera elevation at 45° azimuth — matches the 2D view's 2:1 isometric ratio
+const ISO_Y_FACTOR = Math.sqrt(2 / 3);
 
 export class ThreeJsCityRenderer implements ICityRenderer {
   status: RendererStatus = "uninitialized";
@@ -55,8 +59,14 @@ export class ThreeJsCityRenderer implements ICityRenderer {
 
   // Persistent scene objects that must be disposed with the renderer
   private worldObjects: THREE.Object3D[] = [];
+  private currentGridCols = INITIAL_GRID_SIZE;
+  private currentGridRows = INITIAL_GRID_SIZE;
+  private groundObj: THREE.Object3D | null = null;
+  private gridObj: THREE.Object3D | null = null;
 
   private boundOnResize: (() => void) | null = null;
+  private boundOnKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  private hasInitialFit = false;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -79,28 +89,29 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     // CSS2D renderer for UML popup labels (matches main3.js labelRenderer setup)
     this.labelRenderer = new CSS2DRenderer();
     this.labelRenderer.setSize(width, height);
-    this.labelRenderer.domElement.style.cssText =
-      "position:absolute;top:0;left:0;pointer-events:none;z-index:10";
+    this.labelRenderer.domElement.classList.add("label-overlay");
     container.appendChild(this.labelRenderer.domElement);
 
     // Scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xf2f2f2);
 
-    // Camera (matches main3.js)
-    this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
-    this.camera.position.set(12, 12, 12);
+    // Camera — narrow FOV approximates the orthographic look of the 2D view
+    this.camera = new THREE.PerspectiveCamera(20, width / height, 0.1, 2000);
+    const gc = INITIAL_GRID_SIZE / 2 - 0.5;  // ground centre (size/2 - 0.5 offset)
+    const initDist = INITIAL_GRID_SIZE * 2;
+    this.camera.position.set(gc + initDist, initDist * ISO_Y_FACTOR, gc + initDist);
 
     // OrbitControls with damping (matches main3.js)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.target.set(INITIAL_GRID_SIZE / 2, 0, INITIAL_GRID_SIZE / 2);
+    this.controls.target.set(gc, 0, gc);
 
     // World setup — store returned objects so dispose() can clean them up
     const lights = createLights(this.scene);
-    const ground = createGround(this.scene, INITIAL_GRID_SIZE);
-    const grid = createGrid(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
-    this.worldObjects = [...lights, ground, grid];
+    this.groundObj = createGround(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
+    this.gridObj = createGrid(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
+    this.worldObjects = [...lights, this.groundObj, this.gridObj];
 
     this.renderer.domElement.addEventListener("click", this.onSceneClick);
 
@@ -113,6 +124,15 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       }
     };
     window.addEventListener('resize', this.boundOnResize);
+
+    this.controls.update();
+
+    this.boundOnKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'r' || e.key === 'R') {
+        this.resetView();
+      }
+    };
+    window.addEventListener('keydown', this.boundOnKeyDown);
 
     this.status = "ready";
     this.events.onReady?.();
@@ -142,6 +162,10 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       }
     });
     this.worldObjects = [];
+    this.currentGridCols = INITIAL_GRID_SIZE;
+    this.currentGridRows = INITIAL_GRID_SIZE;
+    this.groundObj = null;
+    this.gridObj = null;
 
     disposeTextureCache();
 
@@ -159,6 +183,11 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     this.camera = null;
     this.controls = null;
     this.container = null;
+    if (this.boundOnKeyDown) {
+      window.removeEventListener('keydown', this.boundOnKeyDown);
+      this.boundOnKeyDown = null;
+    }
+    this.hasInitialFit = false;
     this.status = "disposed";
   }
 
@@ -182,7 +211,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     if (!this.scene) return;
     this.status = "rendering";
 
-    const dtos = filesToBuildingDTOs(state.files);
+    const dtos = filesToBuildingDTOs(state.files, state.layout);
     const incoming = new Map<string, BuildingDTO>(
       dtos.map((dto) => [dto.name ?? `${dto.col}_${dto.row}`, dto])
     );
@@ -205,6 +234,15 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       }
     }
 
+    const { cols, rows } = this.calculateGridSize(dtos);
+    if (cols !== this.currentGridCols || rows !== this.currentGridRows) {
+      this.updateGroundAndGrid(cols, rows);
+    }
+
+    if (!this.hasInitialFit && this.buildingGroups.size > 0) {
+      this.fitCamera();
+      this.hasInitialFit = true;
+    }
     this.status = "ready";
   }
 
@@ -228,11 +266,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
   }
 
   resetView(): void {
-    if (!this.camera || !this.controls) return;
-    // Matches the R-key handler in main3.js
-    this.camera.position.set(12, 12, 12);
-    this.controls.target.set(INITIAL_GRID_SIZE / 2, 0, INITIAL_GRID_SIZE / 2);
-    this.controls.update();
+    this.fitCamera();
   }
 
   // ── Interaction ────────────────────────────────────────────────────────────
@@ -296,6 +330,85 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       current = current.parent;
     }
     return null;
+  }
+
+  private fitCamera(): void {
+    if (!this.camera || !this.controls) return;
+
+    let minX = Infinity, maxX = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+    let maxTop = 0;
+
+    if (this.buildingGroups.size > 0) {
+      for (const group of this.buildingGroups.values()) {
+        minX = Math.min(minX, group.position.x);
+        maxX = Math.max(maxX, group.position.x);
+        minZ = Math.min(minZ, group.position.z);
+        maxZ = Math.max(maxZ, group.position.z);
+        const floors = (group.userData as { floors?: number })?.floors ?? 0;
+        // +1 covers the pyramid roof on houses (see createHouse in renderer3.js).
+        const top = floors + 1;
+        if (top > maxTop) maxTop = top;
+      }
+    } else {
+      minX = 0; maxX = INITIAL_GRID_SIZE - 1;
+      minZ = 0; maxZ = INITIAL_GRID_SIZE - 1;
+      maxTop = 8;
+    }
+
+    const cx = (minX + maxX) / 2;
+    const cy = maxTop / 2;
+    const cz = (minZ + maxZ) / 2;
+
+    const spanX = Math.max(maxX - minX, 0);
+    const spanZ = Math.max(maxZ - minZ, 0);
+    const { dist } = computeCameraFit(
+      { spanX, spanZ, maxTop },
+      { fov: this.camera.fov, aspect: this.camera.aspect || 1 },
+      ISO_Y_FACTOR,
+    );
+
+    this.camera.position.set(cx + dist, dist * ISO_Y_FACTOR + cy, cz + dist);
+    this.controls.target.set(cx, cy, cz);
+    this.controls.update();
+  }
+
+  private calculateGridSize(dtos: BuildingDTO[]): { cols: number; rows: number } {
+    let maxCol = 0;
+    let maxRow = 0;
+    for (const dto of dtos) {
+      if (dto.col > maxCol) maxCol = dto.col;
+      if (dto.row > maxRow) maxRow = dto.row;
+    }
+    return {
+      cols: Math.max(maxCol + 1, 10),
+      rows: Math.max(maxRow + 1, 10),
+    };
+  }
+
+  private updateGroundAndGrid(cols: number, rows: number): void {
+    if (!this.scene) return;
+
+    for (const obj of [this.groundObj, this.gridObj]) {
+      if (!obj) continue;
+      this.scene.remove(obj);
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.LineSegments) {
+        obj.geometry?.dispose();
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        (mats as THREE.Material[]).forEach((m) => m?.dispose());
+      }
+    }
+    this.worldObjects = this.worldObjects.filter(
+      (o) => o !== this.groundObj && o !== this.gridObj
+    );
+
+    const newGround = createGround(this.scene, cols, rows);
+    const newGrid = createGrid(this.scene, cols, rows);
+    this.groundObj = newGround;
+    this.gridObj = newGrid;
+    this.worldObjects.push(newGround, newGrid);
+    this.currentGridCols = cols;
+    this.currentGridRows = rows;
   }
 
   private startLoop(): void {
