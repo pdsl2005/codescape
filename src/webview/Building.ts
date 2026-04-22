@@ -22,6 +22,12 @@ export class Building {
     this.uml = dto.uml;
   }
 
+  get buildingType(): 'house' | 'apartment' | 'skyscraper' {
+    if (this.floors <= 2) { return 'house'; }
+    if (this.floors <= 6) { return 'apartment'; }
+    return 'skyscraper';
+  }
+
   needsRebuild(dto: BuildingDTO): boolean {
     return this.floors !== dto.floors || this.lines !== dto.lines;
   }
