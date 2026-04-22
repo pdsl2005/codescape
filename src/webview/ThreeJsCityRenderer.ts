@@ -27,6 +27,9 @@ import {
   BuildingDTO,
   filesToBuildingDTOs,
 } from "./types";
+import { computeCameraFit } from "../cameraFit";
+
+export { computeCameraFit } from "../cameraFit";
 
 const INITIAL_GRID_SIZE = 20;
 // Y factor for 30° camera elevation at 45° azimuth — matches the 2D view's 2:1 isometric ratio
@@ -86,8 +89,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     // CSS2D renderer for UML popup labels (matches main3.js labelRenderer setup)
     this.labelRenderer = new CSS2DRenderer();
     this.labelRenderer.setSize(width, height);
-    this.labelRenderer.domElement.style.cssText =
-      "position:absolute;top:0;left:0;pointer-events:none;z-index:10";
+    this.labelRenderer.domElement.classList.add("label-overlay");
     container.appendChild(this.labelRenderer.domElement);
 
     // Scene
@@ -358,30 +360,13 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     const cy = maxTop / 2;
     const cz = (minZ + maxZ) / 2;
 
-    // Project bounding volume onto the screen at the iso angle (30° elevation,
-    // 45° azimuth) to match the 2D fitToView: in 2D, gridH = diag*TILE_L/4 +
-    // buildingH (ground diagonal contributes sin(30°)/√2 ≈ 0.354 per unit, and
-    // building height contributes cos(30°) ≈ 0.866 per unit). Without the
-    // height term, tall skyscrapers clip above the frustum.
     const spanX = Math.max(maxX - minX, 0);
     const spanZ = Math.max(maxZ - minZ, 0);
-    const diag = Math.max(spanX + spanZ, 8);
-    const projV = 0.354 * diag + 0.866 * maxTop;
-    const projH = 0.707 * diag;
-
-    const fovRad = (this.camera.fov * Math.PI) / 180;
-    const aspect = this.camera.aspect || 1;
-    const tanHalfFov = Math.tan(fovRad / 2);
-    const padding = 1.1;
-
-    const camToTarget = Math.max(
-      (projV / 2) / tanHalfFov,
-      (projH / 2) / (tanHalfFov * aspect),
-    ) * padding;
-
-    // |offset from target| = dist * √(2 + ISO_Y_FACTOR²); invert to get dist.
-    const isoLen = Math.sqrt(2 + ISO_Y_FACTOR * ISO_Y_FACTOR);
-    const dist = camToTarget / isoLen;
+    const { dist } = computeCameraFit(
+      { spanX, spanZ, maxTop },
+      { fov: this.camera.fov, aspect: this.camera.aspect || 1 },
+      ISO_Y_FACTOR,
+    );
 
     this.camera.position.set(cx + dist, dist * ISO_Y_FACTOR + cy, cz + dist);
     this.controls.target.set(cx, cy, cz);

@@ -88,8 +88,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     // Create canvas
     this.canvas = document.createElement("canvas");
     this.canvas.id = "cityCanvas";
-    this.canvas.style.display = "block";
-    this.canvas.style.background = "#ffffff";
+    this.canvas.classList.add("canvas-2d");
     container.appendChild(this.canvas);
 
     this.ctx = this.canvas.getContext("2d")!;

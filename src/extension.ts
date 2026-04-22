@@ -30,7 +30,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   const createSidePanel = vscode.commands.registerCommand("codescape.createSidePanel", () => {
-    webviewManager.createWebview();
+    webviewManager.createSidePanel();
   });
 
   const createBottomPanel = vscode.commands.registerCommand("codescape.createBottomPanel", () => {
@@ -38,7 +38,7 @@ export async function activate(context: vscode.ExtensionContext) {
   });
 
   const create = vscode.commands.registerCommand("codescape.createPanel", () => {
-    return vscode.commands.executeCommand("codescape.createSidePanel");
+    webviewManager.createSidePanel();
   });
   const existingFiles = [
     ...(await getJavaFiles()),

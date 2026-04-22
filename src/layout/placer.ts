@@ -17,6 +17,7 @@ export function computeLayout(nodes: BuildingNode[]): LayoutMap {
   // Separate top-level classes from inner classes
   const topLevel = nodes.filter(n => !n.parentClass);
   const innerClasses = nodes.filter(n => n.parentClass);
+  const innerIds = new Set(innerClasses.map(ic => ic.id));
 
   // Distribute clusters across a roughly-square 2D grid so unrelated nodes
   // don't all stack at col=0 and appear as a diagonal line in isometric view.
@@ -29,7 +30,7 @@ export function computeLayout(nodes: BuildingNode[]): LayoutMap {
     if (!placed.has(node.id)) {
       // Count unplaced neighbors to determine cluster width before placing
       const clusterNeighbors = node.neighbors.filter(
-        n => !placed.has(n) && !innerClasses.some(ic => ic.id === n)
+        n => !placed.has(n) && !innerIds.has(n)
       );
       const clusterSize = 1 + clusterNeighbors.length;
 
@@ -45,7 +46,7 @@ export function computeLayout(nodes: BuildingNode[]): LayoutMap {
       // Place neighbors to the right in the same row
       let col = curCol + 1;
       for (const neighbor of node.neighbors) {
-        if (!placed.has(neighbor) && !innerClasses.some(ic => ic.id === neighbor)) {
+        if (!placed.has(neighbor) && !innerIds.has(neighbor)) {
           layout[neighbor] = { col, row: curRow, depth: 0 };
           placed.add(neighbor);
           col++;

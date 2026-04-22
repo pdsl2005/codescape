@@ -1,4 +1,6 @@
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import * as vscode from 'vscode';
 
 type CreateWebviewPanelFn = typeof vscode.window.createWebviewPanel;
@@ -96,37 +98,19 @@ export class WebviewFactory {
         const bundleUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'webviewBundle.js')
         );
+        const cssUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'css', 'webview.css')
+        );
         const imagesUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.extensionUri, 'media', 'images')
         );
         const nonce = this.getNonce();
-        return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none';
-                 style-src 'nonce-${nonce}';
-                 script-src 'nonce-${nonce}';
-                 img-src ${webview.cspSource} data:;">
-  <style nonce="${nonce}">
-    body { margin: 0; overflow: hidden; }
-    #city-container { width: 100vw; height: 100vh; }
-    #toggle-view-btn {
-      position: absolute; top: 8px; right: 8px; z-index: 10;
-      padding: 4px 10px;
-      background: var(--vscode-button-background, #0e639c);
-      color: var(--vscode-button-foreground, #fff);
-      border: none; border-radius: 3px; cursor: pointer; font-size: 12px;
-    }
-    #toggle-view-btn:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
-  </style>
-</head>
-<body>
-  <div id="city-container"></div>
-  <button id="toggle-view-btn">Switch to 3D</button>
-  <script nonce="${nonce}">window.CODESCAPE_IMAGES_URI = "${imagesUri}";</script>
-  <script nonce="${nonce}" src="${bundleUri}"></script>
-</body>
-</html>`;
+        const templatePath = path.join(this.extensionUri.fsPath, 'out', 'webview', 'html', 'webview.html');
+        return fs.readFileSync(templatePath, 'utf8')
+            .replaceAll('{{NONCE}}', nonce)
+            .replaceAll('{{CSP_SOURCE}}', webview.cspSource)
+            .replaceAll('{{CSS_URI}}', cssUri.toString())
+            .replaceAll('{{BUNDLE_URI}}', bundleUri.toString())
+            .replaceAll('{{IMAGES_URI}}', imagesUri.toString());
     }
 }

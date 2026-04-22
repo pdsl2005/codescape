@@ -3,6 +3,7 @@
 // Run: node esbuild.webview.mjs
 
 import * as esbuild from "esbuild";
+import { copyFileSync, mkdirSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -37,11 +38,26 @@ const config = {
   plugins: [cdnRedirectPlugin],
 };
 
+function copyAssets() {
+  mkdirSync(resolve(__dirname, "out/webview/css"), { recursive: true });
+  copyFileSync(
+    resolve(__dirname, "src/webview/css/webview.css"),
+    resolve(__dirname, "out/webview/css/webview.css"),
+  );
+  mkdirSync(resolve(__dirname, "out/webview/html"), { recursive: true });
+  copyFileSync(
+    resolve(__dirname, "src/webview/html/webview.html"),
+    resolve(__dirname, "out/webview/html/webview.html"),
+  );
+}
+
 if (isWatch) {
   const ctx = await esbuild.context(config);
   await ctx.watch();
+  copyAssets();
   console.log("Watching webview files...");
 } else {
   await esbuild.build(config);
+  copyAssets();
   console.log("Webview bundle built → out/webview/webviewBundle.js");
 }

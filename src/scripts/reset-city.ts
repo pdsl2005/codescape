@@ -23,7 +23,11 @@ function isParserExport(jsonPath: string): boolean {
   );
 }
 
-const targetDir = process.argv[2] ?? process.cwd();
+const args = process.argv.slice(2);
+const dryRun = args.includes('--dry-run');
+const confirmed = args.includes('--yes');
+const targetDir = args.find(a => !a.startsWith('--')) ?? process.cwd();
+
 const candidates: string[] = [];
 walk(targetDir, candidates);
 
@@ -32,13 +36,28 @@ if (fs.existsSync(rootExport) && !candidates.includes(rootExport)) {
   candidates.push(rootExport);
 }
 
-let deleted = 0;
-for (const file of candidates) {
-  if (path.basename(file) === 'codescape-output.json' || isParserExport(file)) {
-    fs.rmSync(file);
-    console.log(`Deleted: ${file}`);
-    deleted++;
-  }
+const toDelete = candidates.filter(
+  file => path.basename(file) === 'codescape-output.json' || isParserExport(file)
+);
+
+if (toDelete.length === 0) {
+  console.log('Nothing to reset.');
+  process.exit(0);
 }
 
-console.log(`\nReset complete — ${deleted} file(s) removed.`);
+console.log(`Files that would be deleted (${toDelete.length}):`);
+for (const file of toDelete) {
+  console.log(`  ${file}`);
+}
+
+if (dryRun || !confirmed) {
+  console.log('\nDry run — no files deleted. Pass --yes to confirm deletion.');
+  process.exit(0);
+}
+
+for (const file of toDelete) {
+  fs.rmSync(file);
+  console.log(`Deleted: ${file}`);
+}
+
+console.log(`\nReset complete — ${toDelete.length} file(s) removed.`);
