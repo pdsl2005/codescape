@@ -1,7 +1,7 @@
 import { RendererRegistry } from "./ICityRenderer";
 import { CanvasIsoCityRenderer } from "./CanvasIsoCityRenderer";
 import { ThreeJsCityRenderer } from "./ThreeJsCityRenderer";
-import { CityState, FileData } from "./types";
+import { CityState, FileData, LayoutPosition } from "./types";
 // @ts-ignore
 import { setImageBasePath } from "../../media/renderer3.js";
 
@@ -53,7 +53,7 @@ toggleBtn?.addEventListener("click", () => {
   }
   const newRenderer = registry.getActive();
   if (newRenderer && currentClasses.length > 0) {
-    newRenderer.renderCity(parsedClassesToCityState(currentClasses));
+    newRenderer.renderCity(parsedClassesToCityState(currentClasses, currentLayout));
   }
   vscode.postMessage({ type: "VIEW_CHANGED", payload: currentView });
 });
@@ -62,6 +62,7 @@ toggleBtn?.addEventListener("click", () => {
 
 // Maintained so PARTIAL_STATE can merge into it and re-render
 let currentClasses: any[] = [];
+let currentLayout: Record<string, LayoutPosition> | undefined;
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -70,7 +71,10 @@ let currentClasses: any[] = [];
  * renderer's CityState. Each ParsedClassInfo represents one class,
  * so classes is always 1; methods map to functions; Loc maps to lines.
  */
-function parsedClassesToCityState(classes: any[]): CityState {
+function parsedClassesToCityState(
+  classes: any[],
+  layout?: Record<string, LayoutPosition>
+): CityState {
   const files: FileData[] = classes.map((cls) => ({
     name: cls.Classname ?? "",
     lines: cls.Loc ?? 0,
@@ -83,7 +87,7 @@ function parsedClassesToCityState(classes: any[]): CityState {
         `${m.name}(${(m.parameters ?? []).join(", ")}): ${m.returnType ?? "void"}`),
     },
   }));
-  return { files };
+  return { files, layout };
 }
 
 // ── Message listener ───────────────────────────────────────────────────
@@ -97,7 +101,8 @@ window.addEventListener("message", (event) => {
     case "FULL_STATE": {
       // Replace full state and re-render
       currentClasses = msg.payload.classes ?? [];
-      renderer.renderCity(parsedClassesToCityState(currentClasses));
+      currentLayout = msg.payload.layout;
+      renderer.renderCity(parsedClassesToCityState(currentClasses, currentLayout));
       break;
     }
 
@@ -119,7 +124,8 @@ window.addEventListener("message", (event) => {
       );
       currentClasses = Array.from(classMap.values());
 
-      renderer.renderCity(parsedClassesToCityState(currentClasses));
+      currentLayout = msg.payload.layout;
+      renderer.renderCity(parsedClassesToCityState(currentClasses, currentLayout));
       break;
     }
 

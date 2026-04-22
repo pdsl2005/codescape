@@ -20,12 +20,20 @@ export interface UmlClassData {
 /** Full city state passed from the extension to the webview. */
 export interface CityState {
   files: FileData[];
+  layout?: Record<string, LayoutPosition>;
 }
 
 /** Grid position for a building. */
 export interface GridPosition {
   col: number;
   row: number;
+}
+
+/** Grid position from the backend layout algorithm. */
+export interface LayoutPosition {
+  col: number;
+  row: number;
+  depth?: number;
 }
 
 /** Result of a hit-test (e.g. user clicked on a building). */
@@ -63,18 +71,24 @@ const COLOR_PALETTE = [
 ];
 
 /** Convert FileData[] to BuildingDTO[] for renderers that need grid positions. */
-export function filesToBuildingDTOs(files: FileData[]): BuildingDTO[] {
-  return files.map((file, i) => ({
-    col: i % 10,
-    row: Math.floor(i / 10),
-    floors: file.functions + file.classes,
-    color: COLOR_PALETTE[i % COLOR_PALETTE.length],
-    name: file.name,
-    lines: file.lines,
-    functions: file.functions,
-    classes: file.classes,
-    uml: file.uml,
-  }));
+export function filesToBuildingDTOs(
+  files: FileData[],
+  layout?: Record<string, LayoutPosition>
+): BuildingDTO[] {
+  return files.map((file, i) => {
+    const pos = layout?.[file.name];
+    return {
+      col: pos?.col ?? i % 10,
+      row: pos?.row ?? Math.floor(i / 10),
+      floors: file.functions + file.classes,
+      color: COLOR_PALETTE[i % COLOR_PALETTE.length],
+      name: file.name,
+      lines: file.lines,
+      functions: file.functions,
+      classes: file.classes,
+      uml: file.uml,
+    };
+  });
 }
 
 /** View mode identifier. */

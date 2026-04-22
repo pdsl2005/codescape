@@ -124,7 +124,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   // =========================================================================
 
   renderCity(state: CityState): void {
-    this.buildings = filesToBuildingDTOs(state.files);
+    this.buildings = filesToBuildingDTOs(state.files, state.layout);
     if (!this.hasInitialFit) {
       this.fitToView();
       this.hasInitialFit = true;

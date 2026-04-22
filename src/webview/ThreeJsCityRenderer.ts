@@ -94,19 +94,20 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xf2f2f2);
 
-    // Camera — positioned far enough to see the full grid on open
-    this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
-    const cx = INITIAL_GRID_SIZE / 2;
-    this.camera.position.set(cx + INITIAL_GRID_SIZE, INITIAL_GRID_SIZE * ISO_Y_FACTOR, cx + INITIAL_GRID_SIZE);
+    // Camera — narrow FOV approximates the orthographic look of the 2D view
+    this.camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
+    const gc = INITIAL_GRID_SIZE / 2 - 0.5;  // ground centre (size/2 - 0.5 offset)
+    const initDist = INITIAL_GRID_SIZE * 2;
+    this.camera.position.set(gc + initDist, initDist * ISO_Y_FACTOR, gc + initDist);
 
     // OrbitControls with damping (matches main3.js)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.target.set(cx, 0, cx);
+    this.controls.target.set(gc, 0, gc);
 
     // World setup — store returned objects so dispose() can clean them up
     const lights = createLights(this.scene);
-    this.groundObj = createGround(this.scene, INITIAL_GRID_SIZE);
+    this.groundObj = createGround(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
     this.gridObj = createGrid(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
     this.worldObjects = [...lights, this.groundObj, this.gridObj];
 
@@ -159,7 +160,8 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       }
     });
     this.worldObjects = [];
-    this.currentGridSize = INITIAL_GRID_SIZE;
+    this.currentGridCols = INITIAL_GRID_SIZE;
+    this.currentGridRows = INITIAL_GRID_SIZE;
     this.groundObj = null;
     this.gridObj = null;
 
@@ -207,7 +209,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     if (!this.scene) return;
     this.status = "rendering";
 
-    const dtos = filesToBuildingDTOs(state.files);
+    const dtos = filesToBuildingDTOs(state.files, state.layout);
     const incoming = new Map<string, BuildingDTO>(
       dtos.map((dto) => [dto.name ?? `${dto.col}_${dto.row}`, dto])
     );
@@ -230,9 +232,9 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       }
     }
 
-    const neededSize = this.calculateGridSize(dtos);
-    if (neededSize !== this.currentGridSize) {
-      this.updateGroundAndGrid(neededSize);
+    const { cols, rows } = this.calculateGridSize(dtos);
+    if (cols !== this.currentGridCols || rows !== this.currentGridRows) {
+      this.updateGroundAndGrid(cols, rows);
     }
 
     if (!this.hasInitialFit && this.buildingGroups.size > 0) {
@@ -349,25 +351,27 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     const cx = (minX + maxX) / 2;
     const cz = (minZ + maxZ) / 2;
     const extent = Math.max(maxX - minX, maxZ - minZ, 8);
-    const dist = extent * 1.2;
+    const dist = extent * 2.0;
 
     this.camera.position.set(cx + dist, dist * ISO_Y_FACTOR, cz + dist);
     this.controls.target.set(cx, 0, cz);
     this.controls.update();
   }
 
-  private calculateGridSize(dtos: BuildingDTO[]): number {
+  private calculateGridSize(dtos: BuildingDTO[]): { cols: number; rows: number } {
     let maxCol = 0;
     let maxRow = 0;
     for (const dto of dtos) {
       if (dto.col > maxCol) maxCol = dto.col;
       if (dto.row > maxRow) maxRow = dto.row;
     }
-    const needed = Math.max(maxCol, maxRow) + 1;
-    return needed <= 10 ? 10 : needed;
+    return {
+      cols: Math.max(maxCol + 1, 10),
+      rows: Math.max(maxRow + 1, 10),
+    };
   }
 
-  private updateGroundAndGrid(size: number): void {
+  private updateGroundAndGrid(cols: number, rows: number): void {
     if (!this.scene) return;
 
     for (const obj of [this.groundObj, this.gridObj]) {
@@ -383,12 +387,13 @@ export class ThreeJsCityRenderer implements ICityRenderer {
       (o) => o !== this.groundObj && o !== this.gridObj
     );
 
-    const newGround = createGround(this.scene, size);
-    const newGrid = createGrid(this.scene, size, size);
+    const newGround = createGround(this.scene, cols, rows);
+    const newGrid = createGrid(this.scene, cols, rows);
     this.groundObj = newGround;
     this.gridObj = newGrid;
     this.worldObjects.push(newGround, newGrid);
-    this.currentGridSize = size;
+    this.currentGridCols = cols;
+    this.currentGridRows = rows;
   }
 
   private startLoop(): void {

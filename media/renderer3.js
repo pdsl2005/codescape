@@ -3,6 +3,8 @@ import { CSS2DObject } from 'https://unpkg.com/three@0.141.0/examples/jsm/render
 
 let _imageBase = './images';
 
+const gridSize = 1.0;
+
 export function setImageBasePath(base) {
   _imageBase = base.replace(/\/$/, '');
 }

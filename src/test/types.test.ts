@@ -40,4 +40,24 @@ suite('filesToBuildingDTOs', () => {
     assert.strictEqual(dtos[0].col, 0);
     assert.strictEqual(dtos[0].row, 0);
   });
+
+  test('uses layout positions when provided, falls back to grid for missing entries', () => {
+    const files = [
+      makeFile('Alpha'),
+      makeFile('Beta'),
+      makeFile('Gamma'),
+    ];
+    const layout: Record<string, { col: number; row: number }> = {
+      'Alpha': { col: 5, row: 3 },
+      'Beta':  { col: 0, row: 7 },
+      // Gamma has no entry — should fall back to i%10
+    };
+    const dtos = filesToBuildingDTOs(files, layout);
+    assert.strictEqual(dtos[0].col, 5, 'Alpha should use layout col');
+    assert.strictEqual(dtos[0].row, 3, 'Alpha should use layout row');
+    assert.strictEqual(dtos[1].col, 0, 'Beta should use layout col');
+    assert.strictEqual(dtos[1].row, 7, 'Beta should use layout row');
+    assert.strictEqual(dtos[2].col, 2, 'Gamma should fall back to i%10 (index 2)');
+    assert.strictEqual(dtos[2].row, 0, 'Gamma should fall back to Math.floor(2/10)');
+  });
 });
