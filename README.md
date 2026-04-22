@@ -21,7 +21,7 @@ Active prototype with working parser, watcher, relationship graph, and canvas re
 | Explorer webview | Implemented | `codescape.Cityview` |
 | Panel webview | Implemented | Side (`codescape.createSidePanel`), bottom (`codescape.createBottomPanel`), editor tab (`codescape.createPanel`) |
 | Auto-layout abstraction (`src/layout/placer.ts`) | Partial | Exists/tests pass, not wired into live renderer |
-| Message contract typing (`src/types/messages.ts`) | Partial | Does not fully match runtime payloads |
+| Message contract typing (`src/types/messages.ts`) | Implemented | Used by `WebviewManager`/`JavaFileWatcher`; includes `layout`, `fullClasses`, and updated status values |
 | Pan/rotation controls | Not implemented | Zoom-only camera controls |
 
 ## Documentation
