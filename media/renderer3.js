@@ -1,33 +1,42 @@
-import * as THREE from 'three';
-import { CSS2DObject } from 'https://unpkg.com/three@0.141.0/examples/jsm/renderers/CSS2DRenderer.js';
+import * as THREE from "three";
+import { CSS2DObject } from "https://unpkg.com/three@0.141.0/examples/jsm/renderers/CSS2DRenderer.js";
 
-let _imageBase = './images';
+let _imageBase = "./images";
 
 /**
- * Do not remove this!!! It holds the rendering together. 
+ * Do not remove this!!! It holds the rendering together.
  */
 const gridSize = 1.0;
 
 export function setImageBasePath(base) {
-  _imageBase = base.replace(/\/$/, '');
+  _imageBase = base.replace(/\/$/, "");
 }
 
 function img(filename) {
-  return [_imageBase, filename].join('/');
+  return [_imageBase, filename].join("/");
 }
 
 function houseTextures() {
-  return [img('house.png'), img('house2.png'), img('house3.png')];
+  return [img("house.png"), img("house2.png"), img("house3.png")];
 }
 
 function apartmentTextures() {
-  return [img('apt.png'), img('apt2.png'), img('apt3.png'), img('apt4.png'), img('apt5.png')];
+  return [
+    img("apt.png"),
+    img("apt2.png"),
+    img("apt3.png"),
+    img("apt4.png"),
+    img("apt5.png"),
+  ];
 }
 
 function skyscraperTextures() {
   return [
-    img('skyscraper.png'), img('skyscraper2.png'), img('skyscraper3.png'),
-    img('skyscraper4.png'), img('skyscraper5.png'), img('skyscraper6.png'),
+    img("skyscraper.png"),
+    img("skyscraper2.png"),
+    img("skyscraper3.png"),
+    img("skyscraper4.png"),
+    img("skyscraper6.png"),
   ];
 }
 
@@ -56,10 +65,14 @@ export function createGround(scene, cols, rows) {
 
 export function createGrid(scene, cols, rows) {
   const pts = [];
-  for (let r = 0; r <= rows; r++) { pts.push(0, 0, r, cols, 0, r); }
-  for (let c = 0; c <= cols; c++) { pts.push(c, 0, 0, c, 0, rows); }
+  for (let r = 0; r <= rows; r++) {
+    pts.push(0, 0, r, cols, 0, r);
+  }
+  for (let c = 0; c <= cols; c++) {
+    pts.push(c, 0, 0, c, 0, rows);
+  }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
   const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
   const grid = new THREE.LineSegments(geo, mat);
   grid.position.set(-0.5, 0.01, -0.5);
@@ -72,7 +85,9 @@ const _loader = new THREE.TextureLoader();
 const _textureCache = new Map();
 
 function loadTexture(path) {
-  if (_textureCache.has(path)) { return _textureCache.get(path); }
+  if (_textureCache.has(path)) {
+    return _textureCache.get(path);
+  }
   const tex = _loader.load(path);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
@@ -93,9 +108,12 @@ function getRandomTexture(textureArray) {
 export function createBoxBlock(width, height, depth, color, texturePath) {
   const tex = loadTexture(texturePath);
   const geometry = new THREE.BoxGeometry(width, height, depth);
-  const sideMat = new THREE.MeshStandardMaterial({ map: tex, color: new THREE.Color(color) });
+  const sideMat = new THREE.MeshStandardMaterial({
+    map: tex,
+    color: new THREE.Color(color),
+  });
   const topBottom = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(color)
+    color: new THREE.Color(color),
   });
 
   const materials = [sideMat, sideMat, topBottom, topBottom, sideMat, sideMat];
@@ -108,7 +126,7 @@ export function createPyramidRoof(width, height, depth, color) {
   const radius = Math.max(width, depth) / 2 + 0.2;
   const geometry = new THREE.ConeGeometry(radius, height, 4);
   const material = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(color)
+    color: new THREE.Color(color),
   });
 
   const roof = new THREE.Mesh(geometry, material);
@@ -131,7 +149,13 @@ export function createHouse(dto, texturePath) {
 
   // stack block depending on the floor height
   for (let i = 0; i < dto.floors; i++) {
-    const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#FFE135", texture);
+    const block = createBoxBlock(
+      bodyWidth,
+      floorHeight,
+      bodyDepth,
+      "#FFE135",
+      texture,
+    );
     block.position.set(0, floorHeight / 2 + i * floorHeight, 0);
     group.add(block);
   }
@@ -147,7 +171,7 @@ export function createHouse(dto, texturePath) {
   return attachUmlToGroup(group, dto, { texturePath: texture });
 }
 
-// create apt 
+// create apt
 export function createApartment(dto, texturePath) {
   const group = new THREE.Group();
 
@@ -158,7 +182,13 @@ export function createApartment(dto, texturePath) {
   const texture = texturePath ?? getRandomTexture(apartmentTextures());
 
   for (let i = 0; i < dto.floors; i++) {
-    const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#87AE73", texture);
+    const block = createBoxBlock(
+      bodyWidth,
+      floorHeight,
+      bodyDepth,
+      "#87AE73",
+      texture,
+    );
     block.position.set(0, floorHeight / 2 + i * floorHeight, 0);
     group.add(block);
   }
@@ -168,7 +198,7 @@ export function createApartment(dto, texturePath) {
   return attachUmlToGroup(group, dto, { texturePath: texture });
 }
 
-// create skyscraper 
+// create skyscraper
 export function createSkyscraper(dto, texturePath) {
   const group = new THREE.Group();
 
@@ -179,7 +209,13 @@ export function createSkyscraper(dto, texturePath) {
   const texture = texturePath ?? getRandomTexture(skyscraperTextures());
 
   for (let i = 0; i < dto.floors; i++) {
-    const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#82CAFF", texture);
+    const block = createBoxBlock(
+      bodyWidth,
+      floorHeight,
+      bodyDepth,
+      "#82CAFF",
+      texture,
+    );
     block.position.set(0, floorHeight / 2 + i * floorHeight, 0);
     group.add(block);
   }
@@ -189,7 +225,7 @@ export function createSkyscraper(dto, texturePath) {
   return attachUmlToGroup(group, dto, { texturePath: texture });
 }
 
-// decide type of building depending on the floor height 
+// decide type of building depending on the floor height
 export function createBuildingFromDTO(dto, texturePath) {
   if (dto.floors <= 2) {
     return createHouse(dto, texturePath);
@@ -203,7 +239,7 @@ export function createBuildingFromDTO(dto, texturePath) {
 }
 
 export function createBuildingsFromDTOs(dtoList) {
-  return dtoList.map(dto => createBuildingFromDTO(dto));
+  return dtoList.map((dto) => createBuildingFromDTO(dto));
 }
 
 // creating uml label per dto
@@ -213,10 +249,10 @@ function createUmlLabel(dto) {
     fields: [
       `col: ${dto.col}`,
       `row: ${dto.row}`,
-      `floors: ${dto.floors}`
+      `floors: ${dto.floors}`,
       //`color: ${dto.color || "N/A"}`
     ],
-    methods: []
+    methods: [],
   };
 
   // Zero-sized anchor — CSS2DRenderer's translate(-50%,-50%) is a no-op on
