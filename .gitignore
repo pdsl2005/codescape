@@ -2,6 +2,7 @@ node_modules/
 out/
 *.vsix
 .vscode-test/
+codescape-json/
 .env
 .env.local
 .env*.local

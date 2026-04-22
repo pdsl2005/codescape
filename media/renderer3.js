@@ -1,27 +1,44 @@
-import * as THREE from 'three';
+import * as THREE from "three";
+import { CSS2DObject } from "https://unpkg.com/three@0.141.0/examples/jsm/renderers/CSS2DRenderer.js";
 
-const houseTextures = [
-  "./images/house.png",
-  "./images/house2.png",
-  "./images/house3.png"
-];
+let _imageBase = "./images";
 
-const apartmentTextures = [
-  "./images/apt.png",
-  "./images/apt2.png",
-  "./images/apt3.png",
-  "./images/apt4.png",
-  "./images/apt5.png"
-];
+/**
+ * Do not remove this!!! It holds the rendering together.
+ */
+const gridSize = 1.0;
 
-const skyscraperTextures = [
-  "./images/skyscraper.png",
-  "./images/skyscraper2.png",
-  "./images/skyscraper3.png",
-  "./images/skyscraper4.png",
-  "./images/skyscraper5.png",
-  "./images/skyscraper6.png"
-];
+export function setImageBasePath(base) {
+  _imageBase = base.replace(/\/$/, "");
+}
+
+function img(filename) {
+  return [_imageBase, filename].join("/");
+}
+
+function houseTextures() {
+  return [img("house.png"), img("house2.png"), img("house3.png")];
+}
+
+function apartmentTextures() {
+  return [
+    img("apt.png"),
+    img("apt2.png"),
+    img("apt3.png"),
+    img("apt4.png"),
+    img("apt5.png"),
+  ];
+}
+
+function skyscraperTextures() {
+  return [
+    img("skyscraper.png"),
+    img("skyscraper2.png"),
+    img("skyscraper3.png"),
+    img("skyscraper4.png"),
+    img("skyscraper6.png"),
+  ];
+}
 
 export function createLights(scene) {
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
@@ -30,30 +47,72 @@ export function createLights(scene) {
   const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
   directionalLight.position.set(10, 20, 10);
   scene.add(directionalLight);
+
+  return [ambientLight, directionalLight];
 }
 
-export function createGround(scene, size) {
-  const groundGeometry = new THREE.PlaneGeometry(size, size);
-  const groundMaterial = new THREE.MeshStandardMaterial({
-    color: 0xe8e8e8
-  });
+export function createGround(scene, cols, rows) {
+  const groundGeometry = new THREE.PlaneGeometry(cols, rows);
+  const groundMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e8e8 });
 
   const ground = new THREE.Mesh(groundGeometry, groundMaterial);
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(size / 2 - 0.5, 0, size / 2 - 0.5);
+  ground.position.set(cols / 2 - 0.5, 0, rows / 2 - 0.5);
 
   scene.add(ground);
+  return ground;
 }
 
-var gridSize = 1;
+export function createGrassGround(scene, cols, rows) {
+  const tex = loadTexture(img('grass.png'));
+  tex.repeat.set(cols, rows);  // tile once per grid cell
 
-export function createGrid(scene, size, divisions) {
-    const cellSize = gridSize;
-    size = cellSize * divisions;
-  const grid = new THREE.GridHelper(size, divisions, 0x777777, 0xaaaaaa);
-  grid.position.set(size / 2 - cellSize / 2, 0.01, size / 2 - cellSize / 2);
+  const groundGeometry = new THREE.PlaneGeometry(cols, rows);
+  const groundMaterial = new THREE.MeshStandardMaterial({ map: tex });
+
+  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(cols / 2 - 0.5, 0, rows / 2 - 0.5);
+
+  scene.add(ground);
+  return ground;
+}
+
+export function createGrid(scene, cols, rows) {
+  const pts = [];
+  for (let r = 0; r <= rows; r++) {
+    pts.push(0, 0, r, cols, 0, r);
+  }
+  for (let c = 0; c <= cols; c++) {
+    pts.push(c, 0, 0, c, 0, rows);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+  const grid = new THREE.LineSegments(geo, mat);
+  grid.position.set(-0.5, 0.01, -0.5);
 
   scene.add(grid);
+  return grid;
+}
+
+const _loader = new THREE.TextureLoader();
+const _textureCache = new Map();
+
+function loadTexture(path) {
+  if (_textureCache.has(path)) {
+    return _textureCache.get(path);
+  }
+  const tex = _loader.load(path);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  _textureCache.set(path, tex);
+  return tex;
+}
+
+export function disposeTextureCache() {
+  _textureCache.forEach((tex) => tex.dispose());
+  _textureCache.clear();
 }
 
 function getRandomTexture(textureArray) {
@@ -62,14 +121,14 @@ function getRandomTexture(textureArray) {
 
 // basic block per floor
 export function createBoxBlock(width, height, depth, color, texturePath) {
-  const loader = new THREE.TextureLoader();
-  const tex = loader.load(texturePath);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
+  const tex = loadTexture(texturePath);
   const geometry = new THREE.BoxGeometry(width, height, depth);
-  const sideMat = new THREE.MeshStandardMaterial({map: tex});
+  const sideMat = new THREE.MeshStandardMaterial({
+    map: tex,
+    color: new THREE.Color(color),
+  });
   const topBottom = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(color)
+    color: new THREE.Color(color),
   });
 
   const materials = [sideMat, sideMat, topBottom, topBottom, sideMat, sideMat];
@@ -82,7 +141,7 @@ export function createPyramidRoof(width, height, depth, color) {
   const radius = Math.max(width, depth) / 2 + 0.2;
   const geometry = new THREE.ConeGeometry(radius, height, 4);
   const material = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(color)
+    color: new THREE.Color(color),
   });
 
   const roof = new THREE.Mesh(geometry, material);
@@ -94,18 +153,24 @@ export function createPyramidRoof(width, height, depth, color) {
 
 // building generators
 // house
-export function createHouse(dto) {
+export function createHouse(dto, texturePath) {
   const group = new THREE.Group();
 
   const bodyWidth = gridSize;
   const bodyDepth = gridSize;
   const floorHeight = gridSize;
 
-  const texture = getRandomTexture(houseTextures);
+  const texture = texturePath ?? getRandomTexture(houseTextures());
 
-  // stack block depending on the floor height 
+  // stack block depending on the floor height
   for (let i = 0; i < dto.floors; i++) {
-    const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#FFE135", texture);
+    const block = createBoxBlock(
+      bodyWidth,
+      floorHeight,
+      bodyDepth,
+      "#FFE135",
+      texture,
+    );
     block.position.set(0, floorHeight / 2 + i * floorHeight, 0);
     group.add(block);
   }
@@ -117,68 +182,190 @@ export function createHouse(dto) {
   group.add(roof);
 
   group.position.set(dto.col, 0, dto.row);
-  group.userData = dto;
 
-  return group;
+  return attachUmlToGroup(group, dto, { texturePath: texture });
 }
 
-// create apt 
-export function createApartment(dto) {
+// create apt
+export function createApartment(dto, texturePath) {
   const group = new THREE.Group();
 
   const bodyWidth = gridSize;
   const bodyDepth = gridSize;
   const floorHeight = gridSize;
 
-  const texture = getRandomTexture(apartmentTextures);
+  const texture = texturePath ?? getRandomTexture(apartmentTextures());
 
   for (let i = 0; i < dto.floors; i++) {
-    const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#87AE73", texture);
+    const block = createBoxBlock(
+      bodyWidth,
+      floorHeight,
+      bodyDepth,
+      "#87AE73",
+      texture,
+    );
     block.position.set(0, floorHeight / 2 + i * floorHeight, 0);
     group.add(block);
   }
 
   group.position.set(dto.col, 0, dto.row);
-  group.userData = dto;
 
-  return group;
+  return attachUmlToGroup(group, dto, { texturePath: texture });
 }
 
-// create skyscraper 
-export function createSkyscraper(dto) {
+// create skyscraper
+export function createSkyscraper(dto, texturePath) {
   const group = new THREE.Group();
 
-  const bodyWidth = 1.0;
-  const bodyDepth = 1.0;
-  const floorHeight = 1.0;
-  
-  const texture = getRandomTexture(skyscraperTextures);
+  const bodyWidth = gridSize;
+  const bodyDepth = gridSize;
+  const floorHeight = gridSize;
+
+  const texture = texturePath ?? getRandomTexture(skyscraperTextures());
 
   for (let i = 0; i < dto.floors; i++) {
-    const block = createBoxBlock(bodyWidth, floorHeight, bodyDepth, "#82CAFF", texture);
+    const block = createBoxBlock(
+      bodyWidth,
+      floorHeight,
+      bodyDepth,
+      "#82CAFF",
+      texture,
+    );
     block.position.set(0, floorHeight / 2 + i * floorHeight, 0);
     group.add(block);
   }
 
   group.position.set(dto.col, 0, dto.row);
-  group.userData = dto;
 
-  return group;
+  return attachUmlToGroup(group, dto, { texturePath: texture });
 }
 
-// decide type of building depending on the floor height 
-export function createBuildingFromDTO(dto) {
+// decide type of building depending on the floor height
+export function createBuildingFromDTO(dto, texturePath) {
   if (dto.floors <= 2) {
-    return createHouse(dto);
+    return createHouse(dto, texturePath);
   }
 
   if (dto.floors <= 6) {
-    return createApartment(dto);
+    return createApartment(dto, texturePath);
   }
 
-  return createSkyscraper(dto);
+  return createSkyscraper(dto, texturePath);
 }
 
 export function createBuildingsFromDTOs(dtoList) {
-  return dtoList.map(dto => createBuildingFromDTO(dto));
+  return dtoList.map((dto) => createBuildingFromDTO(dto));
+}
+
+// creating uml label per dto
+function createUmlLabel(dto) {
+  const uml = dto.uml || {
+    name: `Building_${dto.col}_${dto.row}`,
+    fields: [
+      `col: ${dto.col}`,
+      `row: ${dto.row}`,
+      `floors: ${dto.floors}`,
+      //`color: ${dto.color || "N/A"}`
+    ],
+    methods: [],
+  };
+
+  // Zero-sized anchor — CSS2DRenderer's translate(-50%,-50%) is a no-op on
+  // 0×0, so the anchor's top-left sits exactly on the projected 3D point.
+  const anchor = document.createElement("div");
+  anchor.className = "uml-anchor";
+
+  // The actual UML box, anchored with its top-center at the 3D point so the
+  // label grows downward from the building roof instead of extending above it.
+  const root = document.createElement("div");
+  root.className = "uml-panel";
+  root.addEventListener("wheel", (e) => e.stopPropagation());
+  // Resize grip needs mousedown/mousemove not to reach OrbitControls.
+  root.addEventListener("mousedown", (e) => e.stopPropagation());
+
+  const header = document.createElement("div");
+  header.textContent = uml.name || "Unnamed";
+  header.className = "uml-panel-header";
+  root.appendChild(header);
+
+  const fieldsSection = document.createElement("div");
+  fieldsSection.className = "uml-panel-section";
+
+  (uml.fields || []).forEach((field) => {
+    const line = document.createElement("div");
+    line.textContent = `- ${field}`;
+    line.className = "uml-panel-line";
+    fieldsSection.appendChild(line);
+  });
+  root.appendChild(fieldsSection);
+
+  const methodsSection = document.createElement("div");
+  methodsSection.className = "uml-panel-section";
+
+  (uml.methods || []).forEach((method) => {
+    const line = document.createElement("div");
+    line.textContent = `+ ${method}`;
+    line.className = "uml-panel-line";
+    methodsSection.appendChild(line);
+  });
+  root.appendChild(methodsSection);
+
+  anchor.appendChild(root);
+
+  const label = new CSS2DObject(anchor);
+  label.visible = false;
+  return label;
+}
+
+// displaying uml label to the building
+export function updateUmlLabel(label, dto) {
+  const uml = dto.uml || { name: `Building_${dto.col}_${dto.row}`, fields: [], methods: [] };
+  const anchor = label.element;
+
+  const header = anchor.querySelector('.uml-panel-header');
+  if (header) { header.textContent = uml.name || 'Unnamed'; }
+
+  const sections = anchor.querySelectorAll('.uml-panel-section');
+  const fieldsSection = sections[0];
+  const methodsSection = sections[1];
+
+  if (fieldsSection) {
+    fieldsSection.innerHTML = '';
+    (uml.fields || []).forEach((field) => {
+      const line = document.createElement('div');
+      line.textContent = `- ${field}`;
+      line.className = 'uml-panel-line';
+      fieldsSection.appendChild(line);
+    });
+  }
+
+  if (methodsSection) {
+    methodsSection.innerHTML = '';
+    (uml.methods || []).forEach((method) => {
+      const line = document.createElement('div');
+      line.textContent = `+ ${method}`;
+      line.className = 'uml-panel-line';
+      methodsSection.appendChild(line);
+    });
+  }
+
+  label.position.set(0, dto.floors + 1.2, 0);
+}
+
+function attachUmlToGroup(group, dto, extraData = {}) {
+  const umlLabel = createUmlLabel(dto);
+
+  // roof / building 위쪽에 뜨도록
+  umlLabel.position.set(0, dto.floors + 1.2, 0);
+
+  group.add(umlLabel);
+
+  group.userData = {
+    ...dto,
+    isBuilding: true,
+    umlLabel: umlLabel,
+    ...extraData,
+  };
+
+  return group;
 }

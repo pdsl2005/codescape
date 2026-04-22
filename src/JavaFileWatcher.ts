@@ -6,7 +6,7 @@ import { ClassInfo } from './parser/javaExtractor';
 import { buildGraph, getRelated } from './relations';
 import { WebviewManager } from './WebviewManager';
 import { computeCityLayout } from './cityLayout';
-import type { PartialStatePayload } from './types/messages';
+import type { PartialStatePayload, FullStatePayload } from './types/messages';
 export class JavaFileWatcher {
     private _javaWatcher: vscode.FileSystemWatcher;
     private _pythonWatcher : vscode.FileSystemWatcher;
@@ -24,6 +24,10 @@ export class JavaFileWatcher {
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
             store.remove(uri);
+            if (!this.webviewManager.hasReadyViews()) {
+                this.webviewManager.cacheFullState(this.buildFullStatePayload(store));
+                return;
+            }
             this.postIncrementalChange(this.buildPartialStatePayload([], removedNames, store));
         });
 
@@ -45,15 +49,32 @@ export class JavaFileWatcher {
             const before = store.get(uri);
             const removedNames = (before?.data ?? []).map((c: ClassInfo) => c.Classname);
             store.remove(uri);
+            if (!this.webviewManager.hasReadyViews()) {
+                this.webviewManager.cacheFullState(this.buildFullStatePayload(store));
+                return;
+            }
             this.postIncrementalChange(this.buildPartialStatePayload([], removedNames, store));
         });
     }
+    private buildFullStatePayload(store: FileParseStore): FullStatePayload {
+        const classes = store.snapshot().flatMap(e => e.entry.data ?? []);
+        return {
+            classes,
+            layout: computeCityLayout(classes),
+            status: classes.length > 0 ? 'ready' : 'empty',
+        };
+    }
+
     private buildPartialStatePayload(
         changedClasses: ClassInfo[],
         removedNames: string[],
         store: FileParseStore
     ): PartialStatePayload {
         const allClasses = store.snapshot().flatMap(e => e.entry.data ?? []);
+        // TODO: fullClasses + layout are always included, so every incremental update
+        // transfers the entire class list and recomputes layout. For large workspaces this
+        // will be expensive. Future fix: send true deltas and move layout computation to
+        // the webview, or cache the layout and recompute only when the class set changes.
         const layout = computeCityLayout(allClasses);
         const graph = buildGraph(allClasses);
         const changedNames = changedClasses.map(c => c.Classname);
@@ -71,6 +92,10 @@ export class JavaFileWatcher {
     private async handleIncrementalChange(uri: vscode.Uri, store: FileParseStore) {
         if (!await isExcluded(uri)) {
             const { changed, removed } = await parseAndStore(uri, store);
+            if (!this.webviewManager.hasReadyViews()) {
+                this.webviewManager.cacheFullState(this.buildFullStatePayload(store));
+                return;
+            }
             const payload = this.buildPartialStatePayload(changed, removed, store);
             this.postIncrementalChange(payload);
         }

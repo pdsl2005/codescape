@@ -1,0 +1,59 @@
+{
+  "sourceFile": "SimpleClass.py",
+  "parsedAt": "2026-04-22T19:43:28.884Z",
+  "classes": [
+    {
+      "Classname": "Dog",
+      "Methods": [
+        {
+          "name": "speak",
+          "parameters": [],
+          "returnType": "str",
+          "modifiers": []
+        },
+        {
+          "name": "get_age",
+          "parameters": [],
+          "returnType": "int",
+          "modifiers": []
+        }
+      ],
+      "Loc": 12,
+      "Type": "class",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [
+        {
+          "name": "species",
+          "type": "str",
+          "modifiers": []
+        },
+        {
+          "name": "name",
+          "type": "unknown",
+          "modifiers": []
+        },
+        {
+          "name": "age",
+          "type": "unknown",
+          "modifiers": []
+        }
+      ],
+      "Constructors": [
+        {
+          "parameters": [
+            {
+              "name": "name",
+              "type": "str"
+            },
+            {
+              "name": "age",
+              "type": "int"
+            }
+          ],
+          "modifiers": []
+        }
+      ]
+    }
+  ]
+}

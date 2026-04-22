@@ -1,14 +1,31 @@
 {
-  "name": "codescape",
-  "displayName": "codescape",
+  "name": "codescapes",
+  "displayName": "Codescapes — Code City Visualizer",
   "description": "Welcome to Codescapes, where you build cities from your code.",
-  "version": "0.0.1",
-  "icon": "media/icon.png",
+  "version": "0.1.1",
+  "publisher": "codescape",
+  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pdsl2005/codescape.git"
+  },
+  "icon": "media/images/isoCube.png",
   "engines": {
     "vscode": "^1.74.0"
   },
   "categories": [
+    "Visualization",
     "Other"
+  ],
+  "keywords": [
+    "java",
+    "python",
+    "visualization",
+    "3d",
+    "ast",
+    "code-analysis",
+    "isometric",
+    "city"
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
@@ -31,6 +48,15 @@
         "title": "Codescape Scan"
       }
     ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "codescapePanel",
+          "title": "Codescape",
+          "icon": "media/images/isoCube.png"
+        }
+      ]
+    },
     "views": {
       "explorer": [
         {
@@ -38,23 +64,37 @@
           "id": "codescape.Cityview",
           "name": "Codescape City"
         }
+      ],
+      "codescapePanel": [
+        {
+          "type": "webview",
+          "id": "codescape.BottomView",
+          "name": "Codescape"
+        }
       ]
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "tsc -p ./ && npm run build:webview",
+    "reset-city": "node out/scripts/reset-city.js",
+    "build:webview": "node esbuild.webview.mjs",
+    "watch": "npm run build:webview && tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "package": "vsce package",
+    "publish": "vsce publish"
   },
   "devDependencies": {
+    "@vscode/vsce": "^3.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
+    "@types/three": "^0.183.1",
     "@types/vscode": "^1.74.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.28.0",
     "eslint": "^9.39.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.52.0"

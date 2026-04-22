@@ -1,0 +1,127 @@
+{
+  "sourceFile": "Inheritance.py",
+  "parsedAt": "2026-04-22T19:43:28.908Z",
+  "classes": [
+    {
+      "Classname": "Animal",
+      "Methods": [
+        {
+          "name": "speak",
+          "parameters": [],
+          "returnType": "str",
+          "modifiers": []
+        }
+      ],
+      "Loc": 6,
+      "Type": "class",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [
+        {
+          "name": "name",
+          "type": "unknown",
+          "modifiers": []
+        }
+      ],
+      "Constructors": [
+        {
+          "parameters": [
+            {
+              "name": "name",
+              "type": "str"
+            }
+          ],
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "Classname": "Dog",
+      "Methods": [
+        {
+          "name": "speak",
+          "parameters": [],
+          "returnType": "str",
+          "modifiers": []
+        }
+      ],
+      "Loc": 7,
+      "Type": "class",
+      "Extends": "Animal",
+      "Implements": [],
+      "Fields": [
+        {
+          "name": "name",
+          "type": "unknown",
+          "modifiers": []
+        },
+        {
+          "name": "breed",
+          "type": "unknown",
+          "modifiers": []
+        }
+      ],
+      "Constructors": [
+        {
+          "parameters": [
+            {
+              "name": "name",
+              "type": "str"
+            },
+            {
+              "name": "breed",
+              "type": "str"
+            }
+          ],
+          "modifiers": []
+        }
+      ]
+    },
+    {
+      "Classname": "GuideDog",
+      "Methods": [],
+      "Loc": 5,
+      "Type": "class",
+      "Extends": "Dog",
+      "Implements": [
+        "object"
+      ],
+      "Fields": [
+        {
+          "name": "name",
+          "type": "unknown",
+          "modifiers": []
+        },
+        {
+          "name": "breed",
+          "type": "unknown",
+          "modifiers": []
+        },
+        {
+          "name": "owner",
+          "type": "unknown",
+          "modifiers": []
+        }
+      ],
+      "Constructors": [
+        {
+          "parameters": [
+            {
+              "name": "name",
+              "type": "str"
+            },
+            {
+              "name": "breed",
+              "type": "str"
+            },
+            {
+              "name": "owner",
+              "type": "str"
+            }
+          ],
+          "modifiers": []
+        }
+      ]
+    }
+  ]
+}

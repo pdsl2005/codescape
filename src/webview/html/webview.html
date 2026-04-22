@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none';
+                 style-src {{CSP_SOURCE}};
+                 script-src 'nonce-{{NONCE}}';
+                 img-src {{CSP_SOURCE}} data:;">
+  <link rel="stylesheet" href="{{CSS_URI}}">
+</head>
+<body>
+  <div id="city-container"></div>
+  <button id="toggle-theme-btn" class="cs-btn">Light Mode</button>
+  <button id="toggle-view-btn" class="cs-btn">Switch to 3D</button>
+  <script nonce="{{NONCE}}">window.CODESCAPE_IMAGES_URI = "{{IMAGES_URI}}";</script>
+  <script nonce="{{NONCE}}" src="{{BUNDLE_URI}}"></script>
+</body>
+</html>

@@ -102,7 +102,7 @@ function shade(color, percent){
 }
 
 // drawing building based on cube
-/*
+
 export function drawIsoBuilding(ctx, baseX, baseY, floors, size, color){
     for (let i = 0; i < floors; i ++){
         drawIsoCube(
@@ -110,8 +110,9 @@ export function drawIsoBuilding(ctx, baseX, baseY, floors, size, color){
         );
     }
 }
-*/
 
+
+/*
 export function drawIsoBuilding(ctx, baseX, baseY, floors, size, color){
     for (let i = 0; i <= floors; i ++){
         drawIsoCubePNG(
@@ -119,3 +120,4 @@ export function drawIsoBuilding(ctx, baseX, baseY, floors, size, color){
         );
     }
 }
+    */

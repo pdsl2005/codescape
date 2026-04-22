@@ -4,7 +4,6 @@ import { minimatch } from "minimatch";
 import { JavaFileWatcher } from "./JavaFileWatcher";
 import { WebviewManager } from "./WebviewManager";
 import { initializeParser, parseAndStore } from "./parser";
-import { buildCityWebviewHtml } from "./cityWebviewHtml";
 import { computeCityLayout } from "./cityLayout";
 import { FileParseStore } from "./state";
 
@@ -25,23 +24,22 @@ export async function activate(context: vscode.ExtensionContext) {
   const javaWatcher = new JavaFileWatcher(store, webviewManager);
   await initializeParser();
 
-  const provider = new CodescapeViewProvider(context.extensionUri, webviewManager);
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("codescape.Cityview", provider)
+    webviewManager.registerViewProvider("codescape.Cityview", 'explorer'),
+    webviewManager.registerViewProvider("codescape.BottomView", 'bottom'),
   );
 
   const createSidePanel = vscode.commands.registerCommand("codescape.createSidePanel", () => {
-    webviewManager.createWebview("side");
+    webviewManager.createSidePanel();
   });
 
   const createBottomPanel = vscode.commands.registerCommand("codescape.createBottomPanel", () => {
-    webviewManager.createWebview("bottom");
+    return vscode.commands.executeCommand("codescape.BottomView.focus");
   });
 
   const create = vscode.commands.registerCommand("codescape.createPanel", () => {
-    webviewManager.createWebview("side");
+    webviewManager.createSidePanel();
   });
-
   const existingFiles = [
     ...(await getJavaFiles()),
     ...(await getPythonFiles()),
@@ -51,12 +49,6 @@ export async function activate(context: vscode.ExtensionContext) {
     await parseAndStore(uri, store);
   }
 
-  // Send full state to webview manager after initial parse
-  const fullState = {
-    classes: store.snapshot().flatMap((e) => e.entry.data ?? []),
-    status: "ready",
-  };
-  webviewManager.broadcastFullState(fullState);
   const classes = store.snapshot().flatMap((entry) => entry.entry.data ?? []);
   webviewManager.broadcastFullState({
     classes,
@@ -151,8 +143,12 @@ async function openClassSourceFromClassName(
     const doc = await vscode.workspace.openTextDocument(fileUri);
     const editor = await vscode.window.showTextDocument(doc);
     const text = doc.getText();
-    const needle = `class ${className}`;
-    const idx = text.indexOf(needle);
+    const keyword =
+      match.Type === 'interface' ? 'interface'
+      : match.Type === 'module'  ? null
+      : 'class';
+    const needle = keyword ? `${keyword} ${className}` : '';
+    const idx = needle ? text.indexOf(needle) : -1;
 
     const targetRange =
       idx >= 0
@@ -168,7 +164,6 @@ async function openClassSourceFromClassName(
     `Could not find source for class ${className}.`,
   );
 }
-
 async function workspaceScan(store: FileParseStore, webviewManager: WebviewManager) {
   const files = [
     ...await getJavaFiles(),
@@ -201,12 +196,6 @@ async function workspaceScan(store: FileParseStore, webviewManager: WebviewManag
     `Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`,
   );
 
-  // Broadcast updated full state to all webviews
-  const fullState = {
-    classes: snap.flatMap((e) => e.entry.data ?? []),
-    status: successCount > 0 ? "ready" : "empty",
-  };
-  webviewManager.broadcastFullState(fullState);
   const scannedClasses = snap.flatMap((entry) => entry.entry.data ?? []);
   webviewManager.broadcastFullState({
     classes: scannedClasses,
@@ -215,76 +204,70 @@ async function workspaceScan(store: FileParseStore, webviewManager: WebviewManag
   });
 }
 
-async function getJavaFiles(): Promise<vscode.Uri[]> {
-  console.log("scanning files....");
-  const excludeUri = await vscode.workspace.findFiles(".exclude");
-  let excludeFilter = null;
+// async function workspaceScan(): Promise<vscode.Uri[]> {
+//   return await getJavaFiles();
+// }
+
+const DEFAULT_EXCLUDE_PATTERNS = [
+  '**/node_modules/**',
+  '**/.git/**',
+  '**/.vscode-test/**',
+  '**/codescape-json/**',
+  '**/out/**',
+  '**/dist/**',
+  '**/build/**',
+];
+
+async function getExcludePatterns(): Promise<string[]> {
+  const excludeUri = await vscode.workspace.findFiles('.exclude');
+  const patterns = [...DEFAULT_EXCLUDE_PATTERNS];
+
   if (excludeUri.length > 0) {
     const content = await vscode.workspace.fs.readFile(excludeUri[0]);
-    const decoded = new TextDecoder("utf-8").decode(content);
-    const excludeFiles = decoded
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.trim() !== "");
-    excludeFilter = "{" + excludeFiles.join(",") + "}";
+    const decoded = new TextDecoder('utf-8').decode(content);
+    patterns.push(
+      ...decoded
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== '')
+    );
   }
-  return vscode.workspace.findFiles("**/*.java", excludeFilter);
+
+  return Array.from(new Set(patterns));
+}
+
+async function buildExcludeGlob(): Promise<string | null> {
+  const patterns = await getExcludePatterns();
+  if (patterns.length === 0) {
+    return null;
+  }
+
+  return `{${patterns.join(',')}}`;
+}
+
+/**
+ * Gets all java files within the workspace excluding the ones mentioned in .exclude.
+ * Note: Files in .exclude must be in glob pattern.
+ * Note: Must be async (can run in background) because find files is an async func.
+ *
+ * @returns An array of the uris for all the .java files not mentioned in .exclude
+ */
+async function getJavaFiles(): Promise<vscode.Uri[]> {
+  console.log("scanning files....");
+  const excludeFilter = await buildExcludeGlob();
+  let javaFiles = await vscode.workspace.findFiles("**/*.java", excludeFilter);
+  return javaFiles;
 }
 
 async function getPythonFiles(): Promise<vscode.Uri[]> {
-  const excludeUri = await vscode.workspace.findFiles(".exclude");
-  let excludeFilter = null;
-  if (excludeUri.length > 0) {
-    const content = await vscode.workspace.fs.readFile(excludeUri[0]);
-    const decoded = new TextDecoder("utf-8").decode(content);
-    const excludeFiles = decoded
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.trim() !== "");
-    excludeFilter = "{" + excludeFiles.join(",") + "}";
-  }
+  const excludeFilter = await buildExcludeGlob();
   return vscode.workspace.findFiles("**/*.py", excludeFilter);
 }
 
-export async function isExcluded(uri: vscode.Uri): Promise<boolean> {
-  const excludeUri = await vscode.workspace.findFiles(".exclude");
+export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
   const relativePath = vscode.workspace.asRelativePath(uri);
-  if (excludeUri.length === 0) {
-    return false;
-  }
-  const content = await vscode.workspace.fs.readFile(excludeUri[0]);
-  const decoded = new TextDecoder("utf-8").decode(content);
-  const excludeFiles = decoded
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.trim() !== "");
-  return excludeFiles.some((pattern) => minimatch(relativePath, pattern));
-}
-
-function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): string {
-  const rendererUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "src", "webview", "renderer.js")
-  );
-  const umlUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "src", "webview", "uml.js")
-  );
-  return buildCityWebviewHtml(rendererUri.toString(), umlUri.toString());
-}
-
-class CodescapeViewProvider implements vscode.WebviewViewProvider {
-  constructor(
-    private readonly extensionUri: vscode.Uri,
-    private readonly webviewManager: WebviewManager,
-  ) { }
-
-  resolveWebviewView(webviewView: vscode.WebviewView): void {
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "src", "webview")],
-    };
-    webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
-    this.webviewManager.addWebview(webviewView, "explorer");
-  }
+  const excludePatterns = await getExcludePatterns();
+  return excludePatterns.some((pattern) => minimatch(relativePath, pattern));
 }
 
 export function deactivate() { }
