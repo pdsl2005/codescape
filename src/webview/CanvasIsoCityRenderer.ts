@@ -56,6 +56,8 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   // Cube image for PNG-based rendering (matches existing renderer.js)
   private cubeImg: HTMLImageElement | null = null;
 
+  private hasInitialFit = false;
+
   // Bound event handlers (so we can remove them in dispose)
   private boundOnResize: (() => void) | null = null;
   private boundOnWheel: ((e: WheelEvent) => void) | null = null;
@@ -90,6 +92,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     this.canvas.width = container.clientWidth || window.innerWidth;
     this.canvas.height = container.clientHeight || window.innerHeight;
     this.vt = { x: this.canvas.width / 2, y: 100, scale: 1 };
+    this.fitToView();
 
     // Bind event listeners
     this.bindEvents();
@@ -112,6 +115,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     this.buildings = [];
     this.buildingBounds = [];
     this.selectedBuildingName = null;
+    this.hasInitialFit = false;
     this.status = "disposed";
   }
 
@@ -121,6 +125,10 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
 
   renderCity(state: CityState): void {
     this.buildings = filesToBuildingDTOs(state.files);
+    if (!this.hasInitialFit) {
+      this.fitToView();
+      this.hasInitialFit = true;
+    }
     this.refresh();
   }
 
@@ -188,6 +196,36 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     this.refresh();
   }
 
+  private fitToView(): void {
+    if (!this.canvas) return;
+    const gridSize = this.calculateGridSize();
+    const maxFloors = this.buildings.length > 0
+      ? Math.max(...this.buildings.map(b => b.floors))
+      : 1;
+
+    // Isometric bounding box at scale=1:
+    //   horizontal span = (gridSize-1) * TILE_L
+    //   vertical span   = buildings above baseline + grid rows below
+    const gridW = (gridSize - 1) * this.TILE_L;
+    const buildingH = maxFloors * (this.TILE_L / 2);
+    const gridH = (gridSize - 1) * (this.TILE_L / 2) + buildingH;
+
+    const padding = 16;
+    const availW = this.canvas.width - padding * 2;
+    const availH = this.canvas.height - padding * 2;
+    const scale = Math.min(
+      gridW > 0 ? availW / gridW : 1,
+      gridH > 0 ? availH / gridH : 1,
+      1.0,
+    );
+
+    this.vt = {
+      x: this.canvas.width / 2,
+      y: padding + buildingH * scale,
+      scale,
+    };
+  }
+
   zoom(delta: number): void {
     const newScale = Math.max(0.2, Math.min(4, this.vt.scale + delta));
     this.vt.scale = newScale;
@@ -195,9 +233,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   }
 
   resetView(): void {
-    if (this.canvas) {
-      this.vt = { x: this.canvas.width / 2, y: 100, scale: 1 };
-    }
+    this.fitToView();
     this.refresh();
   }
 

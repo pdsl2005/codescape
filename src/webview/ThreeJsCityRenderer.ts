@@ -87,14 +87,15 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xf2f2f2);
 
-    // Camera (matches main3.js)
+    // Camera — positioned far enough to see the full grid on open
     this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
-    this.camera.position.set(12, 12, 12);
+    const cx = INITIAL_GRID_SIZE / 2;
+    this.camera.position.set(cx + INITIAL_GRID_SIZE, INITIAL_GRID_SIZE, cx + INITIAL_GRID_SIZE);
 
     // OrbitControls with damping (matches main3.js)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.target.set(INITIAL_GRID_SIZE / 2, 0, INITIAL_GRID_SIZE / 2);
+    this.controls.target.set(cx, 0, cx);
 
     // World setup — store returned objects so dispose() can clean them up
     const lights = createLights(this.scene);
@@ -229,9 +230,9 @@ export class ThreeJsCityRenderer implements ICityRenderer {
 
   resetView(): void {
     if (!this.camera || !this.controls) return;
-    // Matches the R-key handler in main3.js
-    this.camera.position.set(12, 12, 12);
-    this.controls.target.set(INITIAL_GRID_SIZE / 2, 0, INITIAL_GRID_SIZE / 2);
+    const cx = INITIAL_GRID_SIZE / 2;
+    this.camera.position.set(cx + INITIAL_GRID_SIZE, INITIAL_GRID_SIZE, cx + INITIAL_GRID_SIZE);
+    this.controls.target.set(cx, 0, cx);
     this.controls.update();
   }
 
