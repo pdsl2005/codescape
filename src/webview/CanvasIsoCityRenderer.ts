@@ -94,8 +94,8 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     this.ctx = this.canvas.getContext("2d")!;
 
     // Load cube image (used by drawIsoBuilding for PNG-based cubes)
-    this.cubeImg = new Image();
-    this.cubeImg.src = "./images/isoCube.png";
+    //this.cubeImg = new Image();
+    //this.cubeImg.src = "./images/isoCube.png";
 
     // Set initial size
     this.canvas.width = container.clientWidth || window.innerWidth;
@@ -160,14 +160,18 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
 
     // Sort buildings by depth (back to front)
     const sorted = [...this.buildings].sort(
-      (a, b) => (a.col + a.row) - (b.col + b.row)
+      (a, b) => a.col + a.row - (b.col + b.row),
     );
 
     // Draw buildings and record bounding boxes for hit-testing
     this.buildingBounds = [];
     for (const dto of sorted) {
       const { screenX, screenY } = this.placeIsoBuilding(
-        ctx, dto.col, dto.row, dto.floors, dto.color
+        ctx,
+        dto.col,
+        dto.row,
+        dto.floors,
+        dto.color,
       );
 
       this.buildingBounds.push({
@@ -183,7 +187,9 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     // Draw UML overlay for selected building
     this.umlLastBounds = null;
     if (this.selectedBuildingName) {
-      const bound = this.buildingBounds.find(b => b.dto.name === this.selectedBuildingName);
+      const bound = this.buildingBounds.find(
+        (b) => b.dto.name === this.selectedBuildingName,
+      );
       if (bound?.dto.uml) {
         const umlX = bound.screenX - this.TILE_L / 2;
         const preferredUmlY = bound.screenY - bound.height - 20;
@@ -218,17 +224,18 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   private fitToView(): void {
     if (!this.canvas) return;
     const { cols, rows } = this.calculateGridSize();
-    const maxFloors = this.buildings.length > 0
-      ? Math.max(...this.buildings.map(b => b.floors))
-      : 1;
+    const maxFloors =
+      this.buildings.length > 0
+        ? Math.max(...this.buildings.map((b) => b.floors))
+        : 1;
 
     // Isometric diamond for a rectangular (cols × rows) grid:
     //   horizontal span = (cols-1 + rows-1) * TILE_L / 2
     //   vertical span   = (cols-1 + rows-1) * TILE_L / 4 + buildingH
-    const diag = (cols - 1) + (rows - 1);
-    const gridW = diag * this.TILE_L / 2;
+    const diag = cols - 1 + (rows - 1);
+    const gridW = (diag * this.TILE_L) / 2;
     const buildingH = maxFloors * (this.TILE_L / 2);
-    const gridH = diag * this.TILE_L / 4 + buildingH;
+    const gridH = (diag * this.TILE_L) / 4 + buildingH;
 
     const padding = 16;
     const availW = this.canvas.width - padding * 2;
@@ -241,7 +248,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
 
     // Horizontal iso-centre of the rectangular grid
     // (rightmost corner at col=cols-1,row=0; leftmost at col=0,row=rows-1).
-    const isoCentreX = (cols - rows) * this.TILE_L / 4;
+    const isoCentreX = ((cols - rows) * this.TILE_L) / 4;
 
     this.vt = {
       x: this.canvas.width / 2 - isoCentreX * scale,
@@ -321,8 +328,11 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   /** Draw the isometric diamond grid. From renderer.js drawIsoGrid(). */
   private drawIsoGrid(
     ctx: CanvasRenderingContext2D,
-    rows: number, cols: number,
-    size: number, offsetX: number, offsetY: number
+    rows: number,
+    cols: number,
+    size: number,
+    offsetX: number,
+    offsetY: number,
   ): void {
     ctx.strokeStyle = "#2c2c2c";
     const tileW = size;
@@ -330,8 +340,8 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
 
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
-        const isoX = (col - row) * tileW / 2 + offsetX;
-        const isoY = (col + row) * tileH / 2 + offsetY;
+        const isoX = ((col - row) * tileW) / 2 + offsetX;
+        const isoY = ((col + row) * tileH) / 2 + offsetY;
 
         ctx.beginPath();
         ctx.moveTo(isoX, isoY);
@@ -358,16 +368,20 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
         (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
         (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
         (B < 255 ? (B < 1 ? 0 : B) : 255)
-      ).toString(16).slice(1)
+      )
+        .toString(16)
+        .slice(1)
     );
   }
 
   /** Draw a single isometric cube. From renderer.js drawIsoCube(). */
   private drawIsoCube(
     ctx: CanvasRenderingContext2D,
-    x: number, y: number,
-    width: number, height: number,
-    color: string
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    color: string,
   ): void {
     const depthX = width / 2;
     const depthY = width / 4;
@@ -419,10 +433,15 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
    */
   private drawIsoCubePNG(
     ctx: CanvasRenderingContext2D,
-    x: number, y: number,
-    tileSize: number
+    x: number,
+    y: number,
+    tileSize: number,
   ): void {
-    if (this.cubeImg && this.cubeImg.complete && this.cubeImg.naturalWidth > 0) {
+    if (
+      this.cubeImg &&
+      this.cubeImg.complete &&
+      this.cubeImg.naturalWidth > 0
+    ) {
       const scale = 1.45;
       const size = tileSize * scale;
       ctx.drawImage(this.cubeImg, x - size / 2, y - size + 12, size, size);
@@ -435,25 +454,37 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   /** Stack cubes into a building. From renderer.js drawIsoBuilding(). */
   private drawIsoBuilding(
     ctx: CanvasRenderingContext2D,
-    baseX: number, baseY: number,
-    floors: number, size: number, color: string
+    baseX: number,
+    baseY: number,
+    floors: number,
+    size: number,
+    color: string,
   ): void {
     for (let i = 0; i <= floors; i++) {
-      this.drawIsoCubePNG(ctx, baseX, baseY - i * size / 2, size);
+      this.drawIsoCubePNG(ctx, baseX, baseY - (i * size) / 2, size);
     }
   }
 
   /** Place a building on the isometric grid. From main-2.js placeIsoBuilding(). */
   private placeIsoBuilding(
     ctx: CanvasRenderingContext2D,
-    col: number, row: number,
-    floors: number, color: string
+    col: number,
+    row: number,
+    floors: number,
+    color: string,
   ): { screenX: number; screenY: number } {
     // Offset is 0,0 — vt transform handles positioning
-    const isoX = (col - row) * this.TILE_L / 2;
-    const isoY = (col + row) * this.TILE_L / 4;
+    const isoX = ((col - row) * this.TILE_L) / 2;
+    const isoY = ((col + row) * this.TILE_L) / 4;
 
-    this.drawIsoBuilding(ctx, isoX, isoY + this.TILE_L / 2, floors - 1, this.TILE_L, color);
+    this.drawIsoBuilding(
+      ctx,
+      isoX,
+      isoY + this.TILE_L / 2,
+      floors - 1,
+      this.TILE_L,
+      color,
+    );
 
     return { screenX: isoX, screenY: isoY };
   }
@@ -469,7 +500,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
       if (this.container) {
         this.resize(
           this.container.clientWidth || window.innerWidth,
-          this.container.clientHeight || window.innerHeight
+          this.container.clientHeight || window.innerHeight,
         );
       }
     };
@@ -485,13 +516,18 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
         const worldY = (e.clientY - rect.top - this.vt.y) / this.vt.scale;
         const b = this.umlLastBounds;
         const overUml =
-          worldX >= b.x && worldX <= b.x + b.width &&
-          worldY >= b.y && worldY <= b.y + b.height;
+          worldX >= b.x &&
+          worldX <= b.x + b.width &&
+          worldY >= b.y &&
+          worldY <= b.y + b.height;
         if (overUml && b.totalHeight > b.height) {
           const maxOffset = b.totalHeight - b.height;
           this.umlScrollOffset = Math.max(
             0,
-            Math.min(maxOffset, this.umlScrollOffset + e.deltaY / this.vt.scale)
+            Math.min(
+              maxOffset,
+              this.umlScrollOffset + e.deltaY / this.vt.scale,
+            ),
           );
           this.refresh();
           return;
@@ -499,7 +535,10 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
       }
 
       const oldScale = this.vt.scale;
-      const newScale = Math.max(0.2, Math.min(4, oldScale + e.deltaY * -0.0015));
+      const newScale = Math.max(
+        0.2,
+        Math.min(4, oldScale + e.deltaY * -0.0015),
+      );
       this.vt.x = e.clientX - (e.clientX - this.vt.x) * (newScale / oldScale);
       this.vt.y = e.clientY - (e.clientY - this.vt.y) * (newScale / oldScale);
       this.vt.scale = newScale;
@@ -530,7 +569,9 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
       if (result) {
         // Toggle: clicking the same building closes it
         this.selectedBuildingName =
-          this.selectedBuildingName === result.file.name ? null : result.file.name;
+          this.selectedBuildingName === result.file.name
+            ? null
+            : result.file.name;
         this.umlScrollOffset = 0;
         this.refresh();
         this.events.onBuildingClick?.(result);
@@ -548,7 +589,9 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     };
 
     window.addEventListener("resize", this.boundOnResize);
-    this.canvas.addEventListener("wheel", this.boundOnWheel, { passive: false });
+    this.canvas.addEventListener("wheel", this.boundOnWheel, {
+      passive: false,
+    });
     this.canvas.addEventListener("mousedown", this.boundOnMouseDown);
     this.canvas.addEventListener("mouseup", this.boundOnMouseUp);
     this.canvas.addEventListener("mousemove", this.boundOnMouseMove);
@@ -557,14 +600,21 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   }
 
   private unbindEvents(): void {
-    if (this.boundOnResize) window.removeEventListener("resize", this.boundOnResize);
+    if (this.boundOnResize)
+      window.removeEventListener("resize", this.boundOnResize);
     if (this.canvas) {
-      if (this.boundOnWheel) this.canvas.removeEventListener("wheel", this.boundOnWheel);
-      if (this.boundOnMouseDown) this.canvas.removeEventListener("mousedown", this.boundOnMouseDown);
-      if (this.boundOnMouseUp) this.canvas.removeEventListener("mouseup", this.boundOnMouseUp);
-      if (this.boundOnMouseMove) this.canvas.removeEventListener("mousemove", this.boundOnMouseMove);
-      if (this.boundOnClick) this.canvas.removeEventListener("click", this.boundOnClick);
+      if (this.boundOnWheel)
+        this.canvas.removeEventListener("wheel", this.boundOnWheel);
+      if (this.boundOnMouseDown)
+        this.canvas.removeEventListener("mousedown", this.boundOnMouseDown);
+      if (this.boundOnMouseUp)
+        this.canvas.removeEventListener("mouseup", this.boundOnMouseUp);
+      if (this.boundOnMouseMove)
+        this.canvas.removeEventListener("mousemove", this.boundOnMouseMove);
+      if (this.boundOnClick)
+        this.canvas.removeEventListener("click", this.boundOnClick);
     }
-    if (this.boundOnKeyDown) window.removeEventListener("keydown", this.boundOnKeyDown);
+    if (this.boundOnKeyDown)
+      window.removeEventListener("keydown", this.boundOnKeyDown);
   }
 }
