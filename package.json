@@ -31,12 +31,28 @@
         "title": "Codescape Scan"
       }
     ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "codescapePanel",
+          "title": "Codescape",
+          "icon": "media/icon.png"
+        }
+      ]
+    },
     "views": {
       "explorer": [
         {
           "type": "webview",
           "id": "codescape.Cityview",
           "name": "Codescape City"
+        }
+      ],
+      "codescapePanel": [
+        {
+          "type": "webview",
+          "id": "codescape.BottomView",
+          "name": "Codescape"
         }
       ]
     }

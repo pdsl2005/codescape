@@ -29,12 +29,17 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider("codescape.Cityview", provider)
   );
 
+  const bottomProvider = new CodescapeBottomViewProvider(webviewManager);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider("codescape.BottomView", bottomProvider)
+  );
+
   const createSidePanel = vscode.commands.registerCommand("codescape.createSidePanel", () => {
     webviewManager.createWebview("side");
   });
 
   const createBottomPanel = vscode.commands.registerCommand("codescape.createBottomPanel", () => {
-    webviewManager.createWebview("bottom");
+    vscode.commands.executeCommand("codescape.BottomView.focus");
   });
 
   const create = vscode.commands.registerCommand("codescape.createPanel", () => {
@@ -276,6 +281,15 @@ class CodescapeViewProvider implements vscode.WebviewViewProvider {
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     console.log('resolveWebviewView called, view id:', webviewView.viewType);
     this.webviewManager.registerExplorerView(webviewView);
+  }
+}
+
+// bottom panel view
+class CodescapeBottomViewProvider implements vscode.WebviewViewProvider {
+  constructor(private readonly webviewManager: WebviewManager) { }
+  resolveWebviewView(webviewView: vscode.WebviewView): void {
+    console.log('resolveWebviewView called, view id:', webviewView.viewType);
+    this.webviewManager.registerBottomView(webviewView);
   }
 }
 
