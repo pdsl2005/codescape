@@ -79,6 +79,8 @@ export class WebviewManager {
                         payload: this.lastFullState,
                     });
                 }
+            } else if (message.type === 'BUILDING_CLICK') {
+                console.log('BUILDING_CLICK', message.payload);
             }
         });
 

@@ -33,30 +33,49 @@ export function createLights(scene) {
   const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
   directionalLight.position.set(10, 20, 10);
   scene.add(directionalLight);
+
+  return [ambientLight, directionalLight];
 }
 
 export function createGround(scene, size) {
   const groundGeometry = new THREE.PlaneGeometry(size, size);
-  const groundMaterial = new THREE.MeshStandardMaterial({
-    color: 0xe8e8e8
-  });
+  const groundMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e8e8 });
 
   const ground = new THREE.Mesh(groundGeometry, groundMaterial);
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(size / 2 - 0.5, 0, size / 2 - 0.5);
 
   scene.add(ground);
+  return ground;
 }
 
 var gridSize = 1;
 
 export function createGrid(scene, size, divisions) {
-    const cellSize = gridSize;
-    size = cellSize * divisions;
+  const cellSize = gridSize;
+  size = cellSize * divisions;
   const grid = new THREE.GridHelper(size, divisions, 0x777777, 0xaaaaaa);
   grid.position.set(size / 2 - cellSize / 2, 0.01, size / 2 - cellSize / 2);
 
   scene.add(grid);
+  return grid;
+}
+
+const _loader = new THREE.TextureLoader();
+const _textureCache = new Map();
+
+function loadTexture(path) {
+  if (_textureCache.has(path)) { return _textureCache.get(path); }
+  const tex = _loader.load(path);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  _textureCache.set(path, tex);
+  return tex;
+}
+
+export function disposeTextureCache() {
+  _textureCache.forEach((tex) => tex.dispose());
+  _textureCache.clear();
 }
 
 function getRandomTexture(textureArray) {
@@ -65,10 +84,7 @@ function getRandomTexture(textureArray) {
 
 // basic block per floor
 export function createBoxBlock(width, height, depth, color, texturePath) {
-  const loader = new THREE.TextureLoader();
-  const tex = loader.load(texturePath);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
+  const tex = loadTexture(texturePath);
   const geometry = new THREE.BoxGeometry(width, height, depth);
   const sideMat = new THREE.MeshStandardMaterial({ map: tex, color: new THREE.Color(color) });
   const topBottom = new THREE.MeshStandardMaterial({

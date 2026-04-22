@@ -7,6 +7,7 @@ export interface FileData {
   lines: number;       // total lines of code
   functions: number;   // method count
   classes: number;     // class count
+  uml?: UmlClassData;  // populated from parser if available
 }
 
 /** UML class data shown when a building is clicked. */
@@ -53,6 +54,7 @@ export interface BuildingDTO {
   lines?: number;
   functions?: number;
   classes?: number;
+  uml?: UmlClassData;  // passed through from FileData for UML label rendering
 }
 
 const COLOR_PALETTE = [
@@ -71,6 +73,7 @@ export function filesToBuildingDTOs(files: FileData[]): BuildingDTO[] {
     lines: file.lines,
     functions: file.functions,
     classes: file.classes,
+    uml: file.uml,
   }));
 }
 

@@ -76,6 +76,12 @@ function parsedClassesToCityState(classes: any[]): CityState {
     lines: cls.Loc ?? 0,
     functions: cls.Methods?.length ?? 0,
     classes: 1,
+    uml: {
+      name: cls.Classname ?? "",
+      fields: (cls.Fields ?? []).map((f: any) => `${f.name}: ${f.type}`),
+      methods: (cls.Methods ?? []).map((m: any) =>
+        `${m.name}(${(m.parameters ?? []).join(", ")}): ${m.returnType ?? "void"}`),
+    },
   }));
   return { files };
 }

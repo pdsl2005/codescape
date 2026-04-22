@@ -16,6 +16,7 @@ import {
   createGround,
   createGrid,
   createBuildingFromDTO,
+  disposeTextureCache,
 } from "../../media/renderer3.js";
 
 import { ICityRenderer } from "./ICityRenderer";
@@ -52,6 +53,9 @@ export class ThreeJsCityRenderer implements ICityRenderer {
   // Groups keyed by class name — used for incremental add/remove in renderCity
   private buildingGroups = new Map<string, THREE.Object3D>();
 
+  // Persistent scene objects that must be disposed with the renderer
+  private worldObjects: THREE.Object3D[] = [];
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   init(container: HTMLElement, events?: RendererEvents): void {
@@ -87,10 +91,11 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     this.controls.enableDamping = true;
     this.controls.target.set(INITIAL_GRID_SIZE / 2, 0, INITIAL_GRID_SIZE / 2);
 
-    // World setup — calls renderer3.js functions directly
-    createLights(this.scene);
-    createGround(this.scene, INITIAL_GRID_SIZE);
-    createGrid(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
+    // World setup — store returned objects so dispose() can clean them up
+    const lights = createLights(this.scene);
+    const ground = createGround(this.scene, INITIAL_GRID_SIZE);
+    const grid = createGrid(this.scene, INITIAL_GRID_SIZE, INITIAL_GRID_SIZE);
+    this.worldObjects = [...lights, ground, grid];
 
     this.renderer.domElement.addEventListener("click", this.onSceneClick);
 
@@ -103,8 +108,23 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     this.stopLoop();
     this.renderer?.domElement.removeEventListener("click", this.onSceneClick);
 
-    this.buildingGroups.forEach((group) => this.scene?.remove(group));
+    this.buildingGroups.forEach((group) => {
+      this.disposeGroup(group);
+      this.scene?.remove(group);
+    });
     this.buildingGroups.clear();
+
+    this.worldObjects.forEach((obj) => {
+      this.scene?.remove(obj);
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.LineSegments) {
+        obj.geometry?.dispose();
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        (mats as THREE.Material[]).forEach((m) => m?.dispose());
+      }
+    });
+    this.worldObjects = [];
+
+    disposeTextureCache();
 
     if (this.labelRenderer && this.container) {
       this.container.removeChild(this.labelRenderer.domElement);
@@ -123,6 +143,20 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     this.status = "disposed";
   }
 
+  private disposeGroup(group: THREE.Object3D): void {
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry?.dispose();
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        (mats as THREE.Material[]).forEach((m) => m?.dispose());
+      }
+      const c = child as any;
+      if (c.isCSS2DObject && c.element instanceof HTMLElement) {
+        c.element.remove();
+      }
+    });
+  }
+
   // ── Rendering ──────────────────────────────────────────────────────────────
 
   renderCity(state: CityState): void {
@@ -137,6 +171,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     // Remove buildings no longer in state
     for (const [key, group] of this.buildingGroups) {
       if (!incoming.has(key)) {
+        this.disposeGroup(group);
         this.scene.remove(group);
         this.buildingGroups.delete(key);
       }
@@ -285,7 +320,11 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     // Toggle: clicking the same building closes it (matches main3.js behavior)
     if (this.selectedGroup === clickedGroup) { this.closeUml(); return; }
 
-    const result = clickedGroup.userData as HitTestResult;
+    const dto = clickedGroup.userData as BuildingDTO;
+    const result: HitTestResult = {
+      file: { name: dto.name ?? "", lines: dto.lines ?? 0, functions: dto.functions ?? 0, classes: dto.classes ?? 0 },
+      position: { col: dto.col, row: dto.row },
+    };
     this.closeUml();
     this.openUml(result);
     this.events.onBuildingClick?.(result);

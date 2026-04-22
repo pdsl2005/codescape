@@ -16,6 +16,8 @@ import {
   BuildingDTO,
   filesToBuildingDTOs,
 } from "./types";
+// @ts-ignore
+import { drawUmlBox } from "./uml.js";
 
 export class CanvasIsoCityRenderer implements ICityRenderer {
   status: RendererStatus = "uninitialized";
@@ -27,6 +29,9 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
 
   // City state
   private buildings: BuildingDTO[] = [];
+
+  // Name of the currently selected building for UML overlay (null = none)
+  private selectedBuildingName: string | null = null;
 
   private TILE_L = 50;
 
@@ -106,6 +111,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     this.cubeImg = null;
     this.buildings = [];
     this.buildingBounds = [];
+    this.selectedBuildingName = null;
     this.status = "disposed";
   }
 
@@ -155,6 +161,16 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
         width: this.TILE_L,
         height: dto.floors * (this.TILE_L / 4),
       });
+    }
+
+    // Draw UML overlay for selected building
+    if (this.selectedBuildingName) {
+      const bound = this.buildingBounds.find(b => b.dto.name === this.selectedBuildingName);
+      if (bound?.dto.uml) {
+        const umlX = bound.screenX - this.TILE_L / 2;
+        const umlY = bound.screenY - bound.height - 20;
+        drawUmlBox(ctx, umlX, umlY, bound.dto.uml);
+      }
     }
 
     this.status = "ready";
@@ -209,6 +225,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
           lines: b.dto.lines ?? 0,
           functions: b.dto.functions ?? 0,
           classes: b.dto.classes ?? 0,
+          uml: b.dto.uml,
         };
         return { file, position: b.position };
       }
@@ -428,7 +445,14 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     this.boundOnClick = (e: MouseEvent) => {
       const result = this.hitTest(e.clientX, e.clientY);
       if (result) {
+        // Toggle: clicking the same building closes it
+        this.selectedBuildingName =
+          this.selectedBuildingName === result.file.name ? null : result.file.name;
+        this.refresh();
         this.events.onBuildingClick?.(result);
+      } else {
+        this.selectedBuildingName = null;
+        this.refresh();
       }
     };
 
