@@ -1,6 +1,6 @@
 # Codescape
 
-Codescape is a VS Code extension that parses Java code and renders it as an isometric city.
+Codescape is a VS Code extension that parses Java and Python code and renders it as an isometric city.
 
 - Buildings represent classes/interfaces.
 - Height is based on methods + fields.
@@ -14,11 +14,12 @@ Active prototype with working parser, watcher, relationship graph, and canvas re
 
 | Area | Status | Notes |
 |---|---|---|
-| Java parsing (Tree-sitter) | Implemented | Classes/interfaces, methods, fields, constructors |
+| Java parsing (Tree-sitter) | Implemented | Classes/interfaces, inner classes, methods, fields, constructors |
+| Python parsing (Tree-sitter) | Implemented | Classes, module nodes, methods, fields, inheritance, inner classes |
 | Relationship graph | Implemented | Extends/implements/field/ctor dependencies |
 | Incremental updates | Implemented | Watcher emits `PARTIAL_STATE` |
 | Explorer webview | Implemented | `codescape.Cityview` |
-| Panel webview | Implemented | Open via `codescape.createPanel` |
+| Panel webview | Implemented | Side (`codescape.createSidePanel`), bottom (`codescape.createBottomPanel`), editor tab (`codescape.createPanel`) |
 | Auto-layout abstraction (`src/layout/placer.ts`) | Partial | Exists/tests pass, not wired into live renderer |
 | Message contract typing (`src/types/messages.ts`) | Partial | Does not fully match runtime payloads |
 | Pan/rotation controls | Not implemented | Zoom-only camera controls |
@@ -40,8 +41,12 @@ npm run compile
 ```
 3. Launch extension host (`F5` in VS Code).
 4. In the extension host window:
-   - Open the explorer view `Codescape City`, or
-   - Run command `Create Panel` (`codescape.createPanel`).
+   - Open the explorer view `Codescape City` in the sidebar, or
+   - Run command `Create Panel` (`codescape.createPanel`) from the command palette.
+
+Known-good example workspaces:
+- `examples/java-city`
+- `examples/python-city`
 
 ## Development
 
@@ -65,8 +70,10 @@ Test notes:
 ## Commands
 
 Contributed commands:
-- `codescape.createPanel` (`Create Panel`)
-- `codescape.scan` (`Codescape Scan`)
+- `codescape.createPanel` — open city in an editor tab
+- `codescape.createSidePanel` — open city in the side panel
+- `codescape.createBottomPanel` — open city in the bottom panel
+- `codescape.scan` (`Codescape Scan`) — manually trigger a workspace scan
 
 Runtime-registered internal commands:
 - `codescape.dumpParseStore`

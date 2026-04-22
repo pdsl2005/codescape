@@ -1,125 +1,100 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
 import * as path from "path";
-import { FileParseStore } from "./state";
+import { minimatch } from "minimatch";
 import { JavaFileWatcher } from "./JavaFileWatcher";
 import { WebviewManager } from "./WebviewManager";
-import { initializeParser } from "./parser";
-import { parseAndStore } from "./parser";
-import { minimatch } from "minimatch";
+import { initializeParser, parseAndStore } from "./parser";
+import { computeCityLayout } from "./cityLayout";
+import { FileParseStore } from "./state";
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
   console.log("CODESCAPE ACTIVATED");
+
   const store = new FileParseStore();
-  const webviewManager = new WebviewManager(context.extensionUri);
-  const scan = vscode.commands.registerCommand('codescape.scan', () => workspaceScan(store, webviewManager));
+  const webviewManager = new WebviewManager(context.extensionUri, async (message: unknown) => {
+    const msg = message as { type?: string; payload?: { className?: string } };
+    if (msg.type === "OPEN_CLASS_SOURCE" && msg.payload?.className) {
+      await openClassSourceFromClassName(msg.payload.className, store);
+    }
+  });
+
+  const scan = vscode.commands.registerCommand("codescape.scan", () =>
+    workspaceScan(store, webviewManager)
+  );
   const javaWatcher = new JavaFileWatcher(store, webviewManager);
   await initializeParser();
 
-  // Use the console to output diagnostic information (console.log) and errors (console.error)
-  // This line of code will only be executed once when your extension is activated
-  //console.log('Congratulations, your extension "codescape" is now active!');
-
-  // sidebar view
-  const provider = new CodescapeViewProvider(
-    context.extensionUri,
-    webviewManager,
-  );
-
+  const provider = new CodescapeViewProvider(context.extensionUri, webviewManager);
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
+    vscode.window.registerWebviewViewProvider("codescape.Cityview", provider)
   );
 
-  // multi panels
-  const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
-    webviewManager.createPanel('side');
+  const createSidePanel = vscode.commands.registerCommand("codescape.createSidePanel", () => {
+    webviewManager.createWebview("side");
   });
 
-  const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
-    webviewManager.createPanel('bottom');
+  const createBottomPanel = vscode.commands.registerCommand("codescape.createBottomPanel", () => {
+    webviewManager.createWebview("bottom");
   });
 
-  // legacy command
-  const create = vscode.commands.registerCommand('codescape.createPanel', () => {
-    webviewManager.createPanel('side');
+  const create = vscode.commands.registerCommand("codescape.createPanel", () => {
+    webviewManager.createWebview("side");
   });
-
-  // Parse all existing Java and Python files on startup
   const existingFiles = [
-    ...await getJavaFiles(),
-    ...await getPythonFiles(),
+    ...(await getJavaFiles()),
+    ...(await getPythonFiles()),
   ];
 
   for (const uri of existingFiles) {
     await parseAndStore(uri, store);
   }
 
-  // Send full state to webview manager after initial parse
-  const fullState = {
-    classes: store.snapshot().flatMap(e => e.entry.data ?? []),
-    status: 'ready'
-  };
-  webviewManager.broadcastFullState(fullState);
+  const classes = store.snapshot().flatMap((entry) => entry.entry.data ?? []);
+  webviewManager.broadcastFullState({
+    classes,
+    layout: computeCityLayout(classes),
+    status: classes.length > 0 ? "ready" : "empty",
+  });
 
-  const dumpDisposable = vscode.commands.registerCommand(
-    "codescape.dumpParseStore",
-    () => {
+  const dumpDisposable = vscode.commands.registerCommand("codescape.dumpParseStore", () => {
+    const snap = store.snapshot();
+    console.log("Parse store snapshot:", JSON.stringify(snap, null, 2));
+    vscode.window.showInformationMessage(`Parse store contains ${snap.length} entries (see console).`);
+  });
+
+  const exportDisposable = vscode.commands.registerCommand("codescape.exportParseStore", async () => {
+    try {
       const snap = store.snapshot();
-      console.log("Parse store snapshot:", JSON.stringify(snap, null, 2));
-      vscode.window.showInformationMessage(
-        `Parse store contains ${snap.length} entries (see console).`,
-      );
-    },
-  );
-
-  // Expose a command to export the parse store to a JSON file in the workspace root
-  const exportDisposable = vscode.commands.registerCommand(
-    "codescape.exportParseStore",
-    async () => {
-      try {
-        const snap = store.snapshot();
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-          vscode.window.showErrorMessage("No workspace folder is open.");
-          return;
-        }
-
-        const outputPath = path.join(
-          workspaceFolders[0].uri.fsPath,
-          "codescape-output.json",
-        );
-        const outputUri = vscode.Uri.file(outputPath);
-
-        // Convert to exportable format with better structure
-        const exportData = {
-          exportedAt: new Date().toISOString(),
-          totalFiles: snap.length,
-          files: snap.map(({ uri, entry }) => ({
-            file: uri,
-            status: entry.status,
-            classes: entry.status === "parsed" ? entry.data : null,
-          })),
-        };
-
-        const encoder = new TextEncoder();
-        await vscode.workspace.fs.writeFile(
-          outputUri,
-          encoder.encode(JSON.stringify(exportData, null, 2)),
-        );
-
-        vscode.window.showInformationMessage(
-          `Exported parse store to ${outputPath}`,
-        );
-        console.log(`Parse store exported to: ${outputPath}`);
-      } catch (err) {
-        vscode.window.showErrorMessage(`Failed to export parse store: ${err}`);
-        console.error("Export failed:", err);
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showErrorMessage("No workspace folder is open.");
+        return;
       }
-    },
-  );
+
+      const outputPath = path.join(workspaceFolders[0].uri.fsPath, "codescape-output.json");
+      const outputUri = vscode.Uri.file(outputPath);
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        totalFiles: snap.length,
+        files: snap.map(({ uri, entry }) => ({
+          file: uri,
+          status: entry.status,
+          classes: entry.status === "parsed" ? entry.data : null,
+        })),
+      };
+
+      await vscode.workspace.fs.writeFile(
+        outputUri,
+        new TextEncoder().encode(JSON.stringify(exportData, null, 2))
+      );
+
+      vscode.window.showInformationMessage(`Exported parse store to ${outputPath}`);
+      console.log(`Parse store exported to: ${outputPath}`);
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed to export parse store: ${err}`);
+      console.error("Export failed:", err);
+    }
+  });
 
   context.subscriptions.push(dumpDisposable);
   context.subscriptions.push(exportDisposable);
@@ -130,7 +105,10 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(scan);
 }
 
-async function openClassSourceFromClassName(className: string, store: FileParseStore) {
+async function openClassSourceFromClassName(
+  className: string,
+  store: FileParseStore,
+) {
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders || workspaceFolders.length === 0) {
     return;
@@ -139,14 +117,17 @@ async function openClassSourceFromClassName(className: string, store: FileParseS
   const snapshot = store.snapshot();
 
   for (const { uri, entry } of snapshot) {
-    if (entry.status !== 'parsed' || !entry.data) continue;
+    if (entry.status !== "parsed" || !entry.data) {
+      continue;
+    }
 
-    const match = entry.data.find(c => c.Classname === className);
-    if (!match) continue;
+    const match = entry.data.find((c) => c.Classname === className);
+    if (!match) {
+      continue;
+    }
 
     const fileUri = vscode.Uri.parse(uri);
-
-    const isInWorkspace = workspaceFolders.some((folder: vscode.WorkspaceFolder) =>
+    const isInWorkspace = workspaceFolders.some((folder) =>
       fileUri.fsPath.startsWith(folder.uri.fsPath + path.sep)
     );
     if (!isInWorkspace) {
@@ -161,41 +142,38 @@ async function openClassSourceFromClassName(className: string, store: FileParseS
 
     const doc = await vscode.workspace.openTextDocument(fileUri);
     const editor = await vscode.window.showTextDocument(doc);
-
     const text = doc.getText();
     const needle = `class ${className}`;
     const idx = text.indexOf(needle);
 
-    let targetRange: vscode.Range;
-    if (idx >= 0) {
-      const pos = doc.positionAt(idx);
-      targetRange = new vscode.Range(pos, pos);
-    } else {
-      const pos = new vscode.Position(0, 0);
-      targetRange = new vscode.Range(pos, pos);
-    }
+    const targetRange =
+      idx >= 0
+        ? new vscode.Range(doc.positionAt(idx), doc.positionAt(idx))
+        : new vscode.Range(new vscode.Position(0, 0), new vscode.Position(0, 0));
 
     editor.selection = new vscode.Selection(targetRange.start, targetRange.end);
     editor.revealRange(targetRange, vscode.TextEditorRevealType.InCenter);
     return;
   }
 
-  vscode.window.showInformationMessage(`Could not find source for class ${className}.`);
+  vscode.window.showInformationMessage(
+    `Could not find source for class ${className}.`,
+  );
 }
 async function workspaceScan(store: FileParseStore, webviewManager: WebviewManager) {
-  // Get all supported source files not in exclude
   const files = [
     ...await getJavaFiles(),
     ...await getPythonFiles(),
   ];
 
   console.log(`Found ${files.length} source files. Starting parse...`);
-  vscode.window.showInformationMessage(`Codescape: Scanning and parsing ${files.length} source files...`);
+  vscode.window.showInformationMessage(
+    `Codescape: Scanning and parsing ${files.length} source files...`,
+  );
 
   let successCount = 0;
   let failureCount = 0;
 
-  // Parse all files sequentially to avoid overwhelming the parser
   for (const uri of files) {
     try {
       await parseAndStore(uri, store);
@@ -207,15 +185,19 @@ async function workspaceScan(store: FileParseStore, webviewManager: WebviewManag
   }
 
   const snap = store.snapshot();
-  console.log(`Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`);
-  vscode.window.showInformationMessage(`Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`);
+  console.log(
+    `Workspace scan complete. Parsed ${successCount} files, ${failureCount} failures. Store has ${snap.length} entries.`,
+  );
+  vscode.window.showInformationMessage(
+    `Codescape: Scan complete! Successfully parsed ${successCount} files (${failureCount} failures).`,
+  );
 
-  // Broadcast updated full state to all webviews
-  const fullState = {
-    classes: snap.flatMap(e => e.entry.data ?? []),
-    status: successCount > 0 ? 'ready' : 'empty'
-  };
-  webviewManager.broadcastFullState(fullState);
+  const scannedClasses = snap.flatMap((entry) => entry.entry.data ?? []);
+  webviewManager.broadcastFullState({
+    classes: scannedClasses,
+    layout: computeCityLayout(scannedClasses),
+    status: successCount > 0 && scannedClasses.length > 0 ? "ready" : "empty",
+  });
 }
 
 // async function workspaceScan(): Promise<vscode.Uri[]> {
@@ -286,9 +268,8 @@ export async function isExcluded(uri: vscode.Uri): Promise<Boolean> {
 
 // sidebar view
 class CodescapeViewProvider implements vscode.WebviewViewProvider {
-  //add WebviewManager to sidebar
-  constructor(private extensionUri: vscode.Uri, private webviewManager: WebviewManager) { }
-  resolveWebviewView(webviewView: vscode.WebviewView) {
+  constructor(private readonly extensionUri: vscode.Uri, private readonly webviewManager: WebviewManager) { }
+  resolveWebviewView(webviewView: vscode.WebviewView): void {
     console.log('resolveWebviewView called, view id:', webviewView.viewType);
 
     webviewView.webview.options = {
@@ -300,8 +281,7 @@ class CodescapeViewProvider implements vscode.WebviewViewProvider {
       ]
     };
     webviewView.webview.html = getWebviewContent(webviewView.webview, this.extensionUri);
-    // Register this WebviewView with WebviewManager so it participates in the shared messaging/management logic
-    this.webviewManager.addWebview(webviewView);
+    this.webviewManager.addWebview(webviewView, 'explorer');
   }
 }
 
@@ -349,5 +329,4 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
   `;
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() { }

@@ -1,33 +1,33 @@
 import * as vscode from 'vscode';
-import { ClassInfo } from './parser/javaExtractor';
-import {getWebviewContent} from './extension'
+import type { FullStatePayload, PartialStatePayload } from './types/messages';
 
+type ViewLocation = 'side' | 'bottom' | 'explorer';
+type WebviewContainer = vscode.WebviewPanel | vscode.WebviewView;
 
-type ViewLocation = 'side' | 'bottom';
-type WebviewContainer = vscode.WebviewView | vscode.WebviewPanel
 interface ManagedWebview {
     container: WebviewContainer;
+    location: ViewLocation;
     isReady: boolean;
 }
 
-/**
- * WebviewManager handles creating, tracking, and syncing multiple webview panels
- * across different view locations (side pane, bottom panel). Ensures all active
- * views receive state updates and can be properly disposed.
- */
+export type WebviewExtensionMessageHandler = (message: unknown) => void | Promise<void>;
+
 export class WebviewManager {
     private webviews: Map<string, ManagedWebview> = new Map();
-    private lastFullState: any = null;
-    private messageQueue: Array<{ type: string; payload: any }> = [];
+    private lastFullState: FullStatePayload | null = null;
 
     onBuildingClick?: (payload: unknown) => void;
 
-    constructor(private extensionUri: vscode.Uri) { }
+    constructor(
+        private extensionUri: vscode.Uri,
+        private extensionMessageHandler?: WebviewExtensionMessageHandler,
+    ) { }
 
-    /**
-     * Creates a new webview panel at the specified location
-     */
-    createPanel(location: ViewLocation): vscode.WebviewPanel {
+    getLastFullState(): FullStatePayload | null {
+        return this.lastFullState;
+    }
+
+    createWebview(location: Extract<ViewLocation, 'side' | 'bottom'>): vscode.WebviewPanel {
         const viewColumn = location === 'side' ? vscode.ViewColumn.Two : vscode.ViewColumn.Nine;
         const title = location === 'side' ? 'Codescape Side' : 'Codescape Bottom';
 
@@ -46,58 +46,57 @@ export class WebviewManager {
             }
         );
 
-        panel.webview.html = getWebviewContent(panel.webview, this.extensionUri);
-        this.addWebview(panel)
+        panel.webview.html = this.getWebviewContent(panel.webview);
+        this.addWebview(panel, location);
         return panel;
     }
 
-    addWebview(container: WebviewContainer){
-      
+    addWebview(container: WebviewContainer, location: ViewLocation = 'explorer'): void {
         const managedWebview: ManagedWebview = {
-            container : container,
+            container,
+            location,
             isReady: false,
         };
 
         const viewId = this.generateViewId();
         this.webviews.set(viewId, managedWebview);
-      // WebviewView is already ready when provider gives it to us
-      if ('onDidChangeVisibility' in container) {
-          managedWebview.isReady = true;
-          if (this.lastFullState) {
-              container.webview.postMessage({
-                  type: 'FULL_STATE',
-                  payload: this.lastFullState,
-              });
-         }
-      }
-      container.webview.onDidReceiveMessage((message) => {
-            if (message.type === 'READY') {
+
+        if (!('viewColumn' in container)) {
+            managedWebview.isReady = true;
+            if (this.lastFullState) {
+                container.webview.postMessage({
+                    type: 'FULL_STATE',
+                    payload: this.lastFullState,
+                });
+            }
+        }
+
+        container.webview.onDidReceiveMessage(async (message: unknown) => {
+            const msg = message as { type?: string; payload?: unknown };
+            if (msg.type === 'READY') {
                 console.log(`Webview ready: ${viewId}`);
                 managedWebview.isReady = true;
-                // Send full state immediately to new view
                 if (this.lastFullState) {
                     container.webview.postMessage({
                         type: 'FULL_STATE',
                         payload: this.lastFullState,
                     });
                 }
-            } else if (message.type === 'BUILDING_CLICK') {
-                this.onBuildingClick?.(message.payload);
+            } else if (msg.type === 'BUILDING_CLICK') {
+                this.onBuildingClick?.(msg.payload);
+            }
+            if (this.extensionMessageHandler) {
+                await this.extensionMessageHandler(message);
             }
         });
 
-                // Handle disposal
         container.onDidDispose(() => {
             console.log(`Webview disposed: ${viewId}`);
             this.webviews.delete(viewId);
         });
-
     }
 
-    /**
-     * Broadcasts a FULL_STATE message to all active views
-     */
-    broadcastFullState(state: any): void {
+    broadcastFullState(state: FullStatePayload): void {
         this.lastFullState = state;
         const message = {
             type: 'FULL_STATE',
@@ -105,47 +104,47 @@ export class WebviewManager {
         };
 
         for (const [viewId, managed] of this.webviews) {
-            if (managed.isReady) {
-                console.log(`Broadcasting FULL_STATE to ${viewId}`);
-                managed.container.webview
-                    .postMessage(message)
-                    .then((delivered) => console.log(`FULL_STATE delivered to ${viewId}: ${delivered}`));
-            } else {
-                this.messageQueue.push(message);
+            if (!managed.isReady) {
+                continue;
             }
+
+            console.log(`Broadcasting FULL_STATE to ${viewId}`);
+            managed.container.webview
+                .postMessage(message)
+                .then((delivered) => console.log(`FULL_STATE delivered to ${viewId}: ${delivered}`));
         }
     }
 
-    /**
-     * Broadcasts a PARTIAL_STATE (incremental changes) to all active views
-     */
-    broadcastPartialState(payload: {
-        changed?: ClassInfo[];
-        related?: ClassInfo[];
-        removed?: string[];
-    }): void {
+    broadcastPartialState(payload: PartialStatePayload): void {
         const message = {
             type: 'PARTIAL_STATE',
             payload,
         };
-        console.log("Broadcasting starting, sending to: " + this.getActiveViewCount() + " Panels")
+
         for (const [viewId, managed] of this.webviews) {
-            if (managed.isReady) {
-                console.log(`Broadcasting PARTIAL_STATE to ${viewId}`);
-                managed.container.webview
-                    .postMessage(message)
-                    .then((delivered) => console.log(`PARTIAL_STATE delivered to ${viewId}: ${delivered}`));
+            if (!managed.isReady) {
+                continue;
             }
+
+            console.log(`Broadcasting PARTIAL_STATE to ${viewId}`);
+            managed.container.webview
+                .postMessage(message)
+                .then((delivered) => console.log(`PARTIAL_STATE delivered to ${viewId}: ${delivered}`));
         }
     }
 
-    /**
-     * Get the number of active webview instances
-     */
     getActiveViewCount(): number {
         return this.webviews.size;
     }
 
+    hasLocationActive(location: ViewLocation): boolean {
+        for (const managed of this.webviews.values()) {
+            if (managed.location === location) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * Dispose all webviews
@@ -159,17 +158,45 @@ export class WebviewManager {
         this.webviews.clear();
     }
 
-    /**
-     * Gets all registered webviews for external systems (like JavaFileWatcher)
-     * that need to send messages directly
-     */
     getAllWebviews(): vscode.Webview[] {
         return Array.from(this.webviews.values())
-            .filter((m) => m.isReady)
-            .map((m) => m.container.webview);
+            .filter((managed) => managed.isReady)
+            .map((managed) => managed.container.webview);
     }
 
     private generateViewId(): string {
         return `view_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    private getWebviewContent(webview: vscode.Webview): string {
+        const bundleUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'webviewBundle.js')
+        );
+        const imagesUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this.extensionUri, 'media', 'images')
+        );
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #city-container { width: 100vw; height: 100vh; }
+    #toggle-view-btn {
+      position: absolute; top: 8px; right: 8px; z-index: 10;
+      padding: 4px 10px;
+      background: var(--vscode-button-background, #0e639c);
+      color: var(--vscode-button-foreground, #fff);
+      border: none; border-radius: 3px; cursor: pointer; font-size: 12px;
+    }
+    #toggle-view-btn:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+  </style>
+</head>
+<body>
+  <div id="city-container"></div>
+  <button id="toggle-view-btn">Switch to 3D</button>
+  <script>window.CODESCAPE_IMAGES_URI = "${imagesUri}";</script>
+  <script src="${bundleUri}"></script>
+</body>
+</html>`;
     }
 }
