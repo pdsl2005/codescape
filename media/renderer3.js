@@ -267,6 +267,40 @@ function createUmlLabel(dto) {
 }
 
 // displaying uml label to the building
+export function updateUmlLabel(label, dto) {
+  const uml = dto.uml || { name: `Building_${dto.col}_${dto.row}`, fields: [], methods: [] };
+  const anchor = label.element;
+
+  const header = anchor.querySelector('.uml-panel-header');
+  if (header) { header.textContent = uml.name || 'Unnamed'; }
+
+  const sections = anchor.querySelectorAll('.uml-panel-section');
+  const fieldsSection = sections[0];
+  const methodsSection = sections[1];
+
+  if (fieldsSection) {
+    fieldsSection.innerHTML = '';
+    (uml.fields || []).forEach((field) => {
+      const line = document.createElement('div');
+      line.textContent = `- ${field}`;
+      line.className = 'uml-panel-line';
+      fieldsSection.appendChild(line);
+    });
+  }
+
+  if (methodsSection) {
+    methodsSection.innerHTML = '';
+    (uml.methods || []).forEach((method) => {
+      const line = document.createElement('div');
+      line.textContent = `+ ${method}`;
+      line.className = 'uml-panel-line';
+      methodsSection.appendChild(line);
+    });
+  }
+
+  label.position.set(0, dto.floors + 1.2, 0);
+}
+
 function attachUmlToGroup(group, dto, extraData = {}) {
   const umlLabel = createUmlLabel(dto);
 
