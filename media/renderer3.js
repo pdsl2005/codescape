@@ -63,6 +63,21 @@ export function createGround(scene, cols, rows) {
   return ground;
 }
 
+export function createGrassGround(scene, cols, rows) {
+  const tex = loadTexture(img('grass.png'));
+  tex.repeat.set(cols, rows);  // tile once per grid cell
+
+  const groundGeometry = new THREE.PlaneGeometry(cols, rows);
+  const groundMaterial = new THREE.MeshStandardMaterial({ map: tex });
+
+  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(cols / 2 - 0.5, 0, rows / 2 - 0.5);
+
+  scene.add(ground);
+  return ground;
+}
+
 export function createGrid(scene, cols, rows) {
   const pts = [];
   for (let r = 0; r <= rows; r++) {
@@ -303,6 +318,40 @@ function createUmlLabel(dto) {
 }
 
 // displaying uml label to the building
+export function updateUmlLabel(label, dto) {
+  const uml = dto.uml || { name: `Building_${dto.col}_${dto.row}`, fields: [], methods: [] };
+  const anchor = label.element;
+
+  const header = anchor.querySelector('.uml-panel-header');
+  if (header) { header.textContent = uml.name || 'Unnamed'; }
+
+  const sections = anchor.querySelectorAll('.uml-panel-section');
+  const fieldsSection = sections[0];
+  const methodsSection = sections[1];
+
+  if (fieldsSection) {
+    fieldsSection.innerHTML = '';
+    (uml.fields || []).forEach((field) => {
+      const line = document.createElement('div');
+      line.textContent = `- ${field}`;
+      line.className = 'uml-panel-line';
+      fieldsSection.appendChild(line);
+    });
+  }
+
+  if (methodsSection) {
+    methodsSection.innerHTML = '';
+    (uml.methods || []).forEach((method) => {
+      const line = document.createElement('div');
+      line.textContent = `+ ${method}`;
+      line.className = 'uml-panel-line';
+      methodsSection.appendChild(line);
+    });
+  }
+
+  label.position.set(0, dto.floors + 1.2, 0);
+}
+
 function attachUmlToGroup(group, dto, extraData = {}) {
   const umlLabel = createUmlLabel(dto);
 

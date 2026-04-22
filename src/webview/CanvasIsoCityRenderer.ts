@@ -34,6 +34,12 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   private selectedBuildingName: string | null = null;
 
   private TILE_L = 50;
+  private gridColor = "#2c2c2c";
+
+  setTheme(theme: "dark" | "light"): void {
+    this.gridColor = theme === "light" ? "#cccccc" : "#2c2c2c";
+    this.refresh();
+  }
 
   // Viewport transform — single source of truth for pan + zoom (Heewon)
   private vt = { x: 0, y: 100, scale: 1 };
@@ -133,7 +139,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   // =========================================================================
 
   renderCity(state: CityState): void {
-    this.buildings = filesToBuildingDTOs(state.files, state.layout);
+    this.buildings = filesToBuildingDTOs(state.files, state.layout, state.colors);
     if (!this.hasInitialFit) {
       this.fitToView();
       this.hasInitialFit = true;
@@ -334,7 +340,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     offsetX: number,
     offsetY: number,
   ): void {
-    ctx.strokeStyle = "#2c2c2c";
+    ctx.strokeStyle = this.gridColor;
     const tileW = size;
     const tileH = size / 2;
 
@@ -433,9 +439,9 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
    */
   private drawIsoCubePNG(
     ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
+    x: number, y: number,
     tileSize: number,
+    color: string
   ): void {
     if (
       this.cubeImg &&
@@ -446,8 +452,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
       const size = tileSize * scale;
       ctx.drawImage(this.cubeImg, x - size / 2, y - size + 12, size, size);
     } else {
-      // Fallback to drawn cube if image not loaded
-      this.drawIsoCube(ctx, x, y, tileSize, tileSize, "#598BAF");
+      this.drawIsoCube(ctx, x, y, tileSize, tileSize, color);
     }
   }
 
@@ -461,7 +466,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     color: string,
   ): void {
     for (let i = 0; i <= floors; i++) {
-      this.drawIsoCubePNG(ctx, baseX, baseY - (i * size) / 2, size);
+      this.drawIsoCubePNG(ctx, baseX, baseY - i * size / 2, size, color);
     }
   }
 

@@ -2,6 +2,7 @@ import { RendererRegistry } from "./ICityRenderer";
 import { CanvasIsoCityRenderer } from "./CanvasIsoCityRenderer";
 import { ThreeJsCityRenderer } from "./ThreeJsCityRenderer";
 import { CityState, FileData, LayoutPosition } from "./types";
+import { ColorManager } from "./ColorManager";
 // @ts-ignore
 import { setImageBasePath } from "../../media/renderer3.js";
 
@@ -60,10 +61,33 @@ toggleBtn?.addEventListener("click", () => {
       parsedClassesToCityState(currentClasses, currentLayout),
     );
   }
+  applyTheme(currentTheme);
   vscode.postMessage({ type: "VIEW_CHANGED", payload: currentView });
 });
 
+// ── Theme toggle ───────────────────────────────────────────────────────────
+let currentTheme: "dark" | "light" = "dark";
+
+const themeBtn = document.getElementById("toggle-theme-btn") as HTMLButtonElement | null;
+themeBtn?.addEventListener("click", () => {
+  currentTheme = currentTheme === "dark" ? "light" : "dark";
+  applyTheme(currentTheme);
+});
+
+function applyTheme(theme: "dark" | "light"): void {
+  document.body.classList.toggle("cs-light", theme === "light");
+  if (themeBtn) {
+    themeBtn.textContent = theme === "dark" ? "Light Mode" : "Dark Mode";
+  }
+  const renderer = registry.getActive();
+  if (renderer && "setTheme" in renderer) {
+    (renderer as any).setTheme(theme);
+  }
+}
+
 // ── State ──────────────────────────────────────────────────────────────
+
+const colorManager = new ColorManager();
 
 // Maintained so PARTIAL_STATE can merge into it and re-render
 let currentClasses: any[] = [];
@@ -85,6 +109,7 @@ function parsedClassesToCityState(
     lines: cls.Loc ?? 0,
     functions: cls.Methods?.length ?? 0,
     classes: 1,
+    type: cls.Type,
     uml: {
       name: cls.Classname ?? "",
       fields: (cls.Fields ?? []).map((f: any) => `${f.name}: ${f.type}`),
@@ -94,7 +119,8 @@ function parsedClassesToCityState(
       ),
     },
   }));
-  return { files, layout };
+  colorManager.assign(files);
+  return { files, layout, colors: colorManager.toMap() };
 }
 
 // ── Message listener ───────────────────────────────────────────────────

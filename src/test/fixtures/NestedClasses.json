@@ -1,0 +1,44 @@
+{
+  "sourceFile": "NestedClasses.py",
+  "parsedAt": "2026-04-22T19:43:28.897Z",
+  "classes": [
+    {
+      "Classname": "Outer",
+      "Methods": [
+        {
+          "name": "outer_method",
+          "parameters": [],
+          "returnType": "None",
+          "modifiers": []
+        }
+      ],
+      "Loc": 9,
+      "Type": "class",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "innerClasses": [
+        "Inner"
+      ]
+    },
+    {
+      "Classname": "Inner",
+      "Methods": [
+        {
+          "name": "inner_method",
+          "parameters": [],
+          "returnType": "int",
+          "modifiers": []
+        }
+      ],
+      "Loc": 3,
+      "Type": "class",
+      "Extends": null,
+      "Implements": [],
+      "Fields": [],
+      "Constructors": [],
+      "parentClass": "Outer"
+    }
+  ]
+}
