@@ -14,7 +14,7 @@ export interface ClassGraph {
 
 // Collects all class names that a single class depends on.
 // Draws from: Extends, Implements, field types, constructor parameter types, and parent/inner class relationships.
-function getDependencies(cls: ClassInfo): Set<string> {
+function getDependencies(cls: ClassInfo, classByName: Map<string, ClassInfo>): Set<string> {
   const deps = new Set<string>();
 
   if (cls.Extends && !PRIMITIVES.has(cls.Extends)) {
@@ -38,17 +38,19 @@ function getDependencies(cls: ClassInfo): Set<string> {
     }
   }
 
-  // Add dependencies for inner/nested class relationships
-  // Inner classes depend on their parent class
+  // Inner / nested classes depend on their parent
   if (cls.parentClass && !PRIMITIVES.has(cls.parentClass)) {
     deps.add(cls.parentClass);
   }
 
-  // Inner classes depend on sibling classes in the same parent
-  if (cls.parentClass && cls.innerClasses) {
-    for (const innerClass of cls.innerClasses) {
-      if (!PRIMITIVES.has(innerClass)) {
-        deps.add(innerClass);
+  // Sibling inner/nested classes under the same parent (metadata lives on parent)
+  if (cls.parentClass) {
+    const parent = classByName.get(cls.parentClass);
+    if (parent?.innerClasses) {
+      for (const sibling of parent.innerClasses) {
+        if (sibling !== cls.Classname && !PRIMITIVES.has(sibling)) {
+          deps.add(sibling);
+        }
       }
     }
   }
@@ -61,6 +63,7 @@ function getDependencies(cls: ClassInfo): Set<string> {
 export function buildGraph(allClasses: ClassInfo[]): ClassGraph {
   const dependsOn = new Map<string, Set<string>>();
   const dependedOnBy = new Map<string, Set<string>>();
+  const classByName = new Map(allClasses.map((c) => [c.Classname, c]));
 
   // Initialise nodes for every known class
   for (const cls of allClasses) {
@@ -70,7 +73,7 @@ export function buildGraph(allClasses: ClassInfo[]): ClassGraph {
 
   // Populate edges
   for (const cls of allClasses) {
-    const deps = getDependencies(cls);
+    const deps = getDependencies(cls, classByName);
     dependsOn.set(cls.Classname, deps);
 
     for (const dep of deps) {

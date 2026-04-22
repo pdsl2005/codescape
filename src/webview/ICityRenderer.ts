@@ -117,7 +117,9 @@ export class RendererRegistry {
       throw new Error(`No renderer registered for mode "${mode}"`);
     }
 
-    renderer.init(container, events);
+    if (renderer !== this.active || renderer.status !== "ready") {
+      renderer.init(container, events);
+    }
     this.active = renderer;
     this.activeMode = mode;
     return renderer;
