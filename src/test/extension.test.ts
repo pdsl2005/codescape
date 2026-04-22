@@ -114,16 +114,19 @@ suite('Extension Test Suite', () => {
     assert.strictEqual(fullState!.payload.status, 'ready');
   });
 
-  test('registerExplorerView replays lastFullState immediately on registration', async () => {
+  test('registerExplorerView replays lastFullState after READY handshake', async () => {
     const postedMessages: unknown[] = [];
+    let messageHandler: ((msg: unknown) => void | Promise<void>) | undefined;
 
     const fakeView = {
       viewType: 'codescape.Cityview',
       webview: {
         html: '',
         options: {},
-        onDidReceiveMessage: (_handler: (msg: unknown) => void) =>
-          new vscode.Disposable(() => {}),
+        onDidReceiveMessage: (handler: (msg: unknown) => void) => {
+          messageHandler = handler;
+          return new vscode.Disposable(() => {});
+        },
         postMessage: async (msg: unknown) => {
           postedMessages.push(msg);
           return true;
@@ -131,6 +134,7 @@ suite('Extension Test Suite', () => {
         asWebviewUri: (uri: vscode.Uri) => uri,
       },
       onDidDispose: (_cb: () => void) => new vscode.Disposable(() => {}),
+      onDidChangeVisibility: (_cb: () => void) => new vscode.Disposable(() => {}),
     };
 
     const manager = new WebviewManager(vscode.Uri.file(process.cwd()));
@@ -143,9 +147,13 @@ suite('Extension Test Suite', () => {
 
     manager.registerExplorerView(fakeView as unknown as vscode.WebviewView);
 
-    assert.ok(postedMessages.length > 0, 'explorer view should receive replayed state immediately');
+    assert.strictEqual(postedMessages.length, 0, 'no FULL_STATE before READY');
+
+    assert.ok(messageHandler, 'onDidReceiveMessage handler must be registered');
+    await messageHandler!({ type: 'READY' });
+
     const fullStateMsg = postedMessages.find((m: any) => m.type === 'FULL_STATE');
-    assert.ok(fullStateMsg, 'expected a FULL_STATE replay message');
+    assert.ok(fullStateMsg, 'expected FULL_STATE after READY');
     assert.strictEqual((fullStateMsg as any).payload.status, 'ready');
   });
 });

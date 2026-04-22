@@ -4,10 +4,6 @@ import type { FullStatePayload, PartialStatePayload } from './types/messages';
 type ViewLocation = 'side' | 'bottom' | 'explorer';
 type WebviewContainer = vscode.WebviewPanel | vscode.WebviewView;
 
-function isWebviewView(container: WebviewContainer): container is vscode.WebviewView {
-    return 'onDidChangeVisibility' in container;
-}
-
 interface ManagedWebview {
     container: WebviewContainer;
     location: ViewLocation;
@@ -80,16 +76,6 @@ export class WebviewManager {
         const viewId = this.generateViewId();
         this.webviews.set(viewId, managedWebview);
 
-        if (isWebviewView(container)) {
-            managedWebview.isReady = true;
-            if (this.lastFullState) {
-                container.webview.postMessage({
-                    type: 'FULL_STATE',
-                    payload: this.lastFullState,
-                });
-            }
-        }
-
         container.webview.onDidReceiveMessage(async (message: unknown) => {
             const msg = message as { type?: string; payload?: unknown };
             if (msg.type === 'READY') {
@@ -112,6 +98,10 @@ export class WebviewManager {
             console.log(`Webview disposed: ${viewId}`);
             this.webviews.delete(viewId);
         });
+    }
+
+    cacheFullState(state: FullStatePayload): void {
+        this.lastFullState = state;
     }
 
     broadcastFullState(state: FullStatePayload): void {
