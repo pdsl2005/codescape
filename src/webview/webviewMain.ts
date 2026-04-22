@@ -2,6 +2,7 @@ import { RendererRegistry } from "./ICityRenderer";
 import { CanvasIsoCityRenderer } from "./CanvasIsoCityRenderer";
 import { ThreeJsCityRenderer } from "./ThreeJsCityRenderer";
 import { CityState, FileData, LayoutPosition } from "./types";
+import { ColorManager } from "./ColorManager";
 // @ts-ignore
 import { setImageBasePath } from "../../media/renderer3.js";
 
@@ -81,6 +82,8 @@ function applyTheme(theme: "dark" | "light"): void {
 
 // ── State ──────────────────────────────────────────────────────────────
 
+const colorManager = new ColorManager();
+
 // Maintained so PARTIAL_STATE can merge into it and re-render
 let currentClasses: any[] = [];
 let currentLayout: Record<string, LayoutPosition> | undefined;
@@ -101,6 +104,7 @@ function parsedClassesToCityState(
     lines: cls.Loc ?? 0,
     functions: cls.Methods?.length ?? 0,
     classes: 1,
+    type: cls.Type,
     uml: {
       name: cls.Classname ?? "",
       fields: (cls.Fields ?? []).map((f: any) => `${f.name}: ${f.type}`),
@@ -108,7 +112,8 @@ function parsedClassesToCityState(
         `${m.name}(${(m.parameters ?? []).join(", ")}): ${m.returnType ?? "void"}`),
     },
   }));
-  return { files, layout };
+  colorManager.assign(files);
+  return { files, layout, colors: colorManager.toMap() };
 }
 
 // ── Message listener ───────────────────────────────────────────────────

@@ -198,7 +198,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
     if (!this.scene) return;
     this.status = "rendering";
 
-    const dtos = filesToBuildingDTOs(state.files, state.layout);
+    const dtos = filesToBuildingDTOs(state.files, state.layout, state.colors);
     const incoming = new Map<string, BuildingDTO>(
       dtos.map((dto) => [dto.name ?? `${dto.col}_${dto.row}`, dto])
     );

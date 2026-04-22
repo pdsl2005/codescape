@@ -139,7 +139,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   // =========================================================================
 
   renderCity(state: CityState): void {
-    this.buildings = filesToBuildingDTOs(state.files, state.layout);
+    this.buildings = filesToBuildingDTOs(state.files, state.layout, state.colors);
     if (!this.hasInitialFit) {
       this.fitToView();
       this.hasInitialFit = true;
@@ -426,15 +426,15 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
   private drawIsoCubePNG(
     ctx: CanvasRenderingContext2D,
     x: number, y: number,
-    tileSize: number
+    tileSize: number,
+    color: string
   ): void {
     if (this.cubeImg && this.cubeImg.complete && this.cubeImg.naturalWidth > 0) {
       const scale = 1.45;
       const size = tileSize * scale;
       ctx.drawImage(this.cubeImg, x - size / 2, y - size + 12, size, size);
     } else {
-      // Fallback to drawn cube if image not loaded
-      this.drawIsoCube(ctx, x, y, tileSize, tileSize, "#598BAF");
+      this.drawIsoCube(ctx, x, y, tileSize, tileSize, color);
     }
   }
 
@@ -445,7 +445,7 @@ export class CanvasIsoCityRenderer implements ICityRenderer {
     floors: number, size: number, color: string
   ): void {
     for (let i = 0; i <= floors; i++) {
-      this.drawIsoCubePNG(ctx, baseX, baseY - i * size / 2, size);
+      this.drawIsoCubePNG(ctx, baseX, baseY - i * size / 2, size, color);
     }
   }
 
