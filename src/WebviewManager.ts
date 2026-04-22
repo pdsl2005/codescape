@@ -129,7 +129,10 @@ export class WebviewManager {
             console.log(`Broadcasting FULL_STATE to ${viewId}`);
             managed.container.webview
                 .postMessage(message)
-                .then((delivered) => console.log(`FULL_STATE delivered to ${viewId}: ${delivered}`));
+                .then(
+                    (delivered) => console.log(`FULL_STATE delivered to ${viewId}: ${delivered}`),
+                    (err: unknown) => console.warn(`FULL_STATE post failed for ${viewId}:`, err),
+                );
         }
     }
 
@@ -147,7 +150,10 @@ export class WebviewManager {
             console.log(`Broadcasting PARTIAL_STATE to ${viewId}`);
             managed.container.webview
                 .postMessage(message)
-                .then((delivered) => console.log(`PARTIAL_STATE delivered to ${viewId}: ${delivered}`));
+                .then(
+                    (delivered) => console.log(`PARTIAL_STATE delivered to ${viewId}: ${delivered}`),
+                    (err: unknown) => console.warn(`PARTIAL_STATE post failed for ${viewId}:`, err),
+                );
         }
     }
 
