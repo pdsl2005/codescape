@@ -322,7 +322,7 @@ export class ThreeJsCityRenderer implements ICityRenderer {
 
     const dto = clickedGroup.userData as BuildingDTO;
     const result: HitTestResult = {
-      file: { name: dto.name ?? "", lines: dto.lines ?? 0, functions: dto.functions ?? 0, classes: dto.classes ?? 0 },
+      file: { name: dto.name ?? `${dto.col}_${dto.row}`, lines: dto.lines ?? 0, functions: dto.functions ?? 0, classes: dto.classes ?? 0 },
       position: { col: dto.col, row: dto.row },
     };
     this.closeUml();

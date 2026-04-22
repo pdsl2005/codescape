@@ -138,7 +138,7 @@ export function createHouse(dto) {
   group.position.set(dto.col, 0, dto.row);
   group.userData = dto;
 
-  return attachUmlToGroup(group, dto); // changed this line - heewon
+  return attachUmlToGroup(group, dto);
 }
 
 // create apt 

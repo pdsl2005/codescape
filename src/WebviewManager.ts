@@ -20,6 +20,8 @@ export class WebviewManager {
     private lastFullState: any = null;
     private messageQueue: Array<{ type: string; payload: any }> = [];
 
+    onBuildingClick?: (payload: unknown) => void;
+
     constructor(private extensionUri: vscode.Uri) { }
 
     /**
@@ -80,7 +82,7 @@ export class WebviewManager {
                     });
                 }
             } else if (message.type === 'BUILDING_CLICK') {
-                console.log('BUILDING_CLICK', message.payload);
+                this.onBuildingClick?.(message.payload);
             }
         });
 
@@ -149,13 +151,12 @@ export class WebviewManager {
      * Dispose all webviews
      */
     disposeAll(): void {
-        for (const id of this.webviews.keys()) {
-          let managed = this.webviews.get(id);
-          if(managed != null && 'dispose' in managed.container){
-              managed.container.dispose();
-              this.webviews.delete(id);
+        for (const managed of this.webviews.values()) {
+            if ('dispose' in managed.container) {
+                managed.container.dispose();
+            }
         }
-      }
+        this.webviews.clear();
     }
 
     /**

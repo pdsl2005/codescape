@@ -25,27 +25,27 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // sidebar view
   const provider = new CodescapeViewProvider(
-  context.extensionUri,
-  webviewManager,
-);
+    context.extensionUri,
+    webviewManager,
+  );
 
-context.subscriptions.push(
-  vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
-);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider("codescape.Cityview", provider),
+  );
 
-// multi panels
-const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
-  webviewManager.createPanel('side');
-});
+  // multi panels
+  const createSidePanel = vscode.commands.registerCommand('codescape.createSidePanel', () => {
+    webviewManager.createPanel('side');
+  });
 
-const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
-  webviewManager.createPanel('bottom');
-});
+  const createBottomPanel = vscode.commands.registerCommand('codescape.createBottomPanel', () => {
+    webviewManager.createPanel('bottom');
+  });
 
-// legacy command
-const create = vscode.commands.registerCommand('codescape.createPanel', () => {
-  webviewManager.createPanel('side');
-});
+  // legacy command
+  const create = vscode.commands.registerCommand('codescape.createPanel', () => {
+    webviewManager.createPanel('side');
+  });
 
   // Parse all existing Java and Python files on startup
   const existingFiles = [
