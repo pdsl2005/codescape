@@ -164,6 +164,14 @@ export class WebviewManager {
 
     /** Broadcasts an incremental state update to all ready views. */
     broadcastPartialState(payload: PartialStatePayload): void {
+        // Keep lastFullState current so a toggled/newly-opened view gets the
+        // right data when the READY handshake triggers a FULL_STATE replay.
+        this.lastFullState = {
+            classes: payload.fullClasses,
+            layout: payload.layout,
+            status: payload.fullClasses.length > 0 ? 'ready' : 'empty',
+        };
+
         const message = {
             type: 'PARTIAL_STATE',
             payload,
